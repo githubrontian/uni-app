@@ -88,6 +88,10 @@ describe('codegen', () => {
 
   it('generate v-slot', () => {
     assertCodegen(
+      '<view><view v-for="(el, ind) in list" :key="ind"><test-component :list="el"><template #test="{ sendList }"><view v-for="(item, index) in sendList" :key="index"></view></template></test-component></view></view>',
+      `with(this){return _c('view',_l((_$s(1,'f',{forItems:list})),function(el,ind,$20,$30){return _c('view',{key:_$s(1,'f',{forIndex:$20,key:ind})},[_c('test-component',{attrs:{"list":el,"_i":("2-"+$30)},scopedSlots:_u([{key:"test",fn:function({ sendList }, _svm, _si){return _l((_svm._$s((4+'-'+$30+"-"+_si),'f',{forItems:sendList})),function(item,index,$21,$31){return _c('view',{key:_svm._$s((4+'-'+$30+"-"+_si),'f',{forIndex:$21,key:index}),attrs:{"_i":(("4-"+_si)+$30+'-'+$31)}})})}}],null,true)})],1)}),0)}`
+    )
+    assertCodegen(
       '<current-user v-slot="{ user }">{{ user.firstName }}</current-user>',
       `with(this){return _c('current-user',{attrs:{"_i":0},scopedSlots:_u([{key:"default",fn:function({ user }, _svm, _si){return [_v((_svm._$s(("0-"+_si),'t0-0',_s(user.firstName))))]}}])})}`
     )
@@ -127,6 +131,14 @@ describe('codegen', () => {
       '<view id="aaa" class="bbbb"></view>',
       `with(this){return _c('view',{staticClass:_$s(0,'sc',"bbbb"),attrs:{"id":"aaa","_i":0}})}`
     )
+    assertCodegen(
+      '<custom id="id"></custom>',
+      `with(this){return _c('custom',{attrs:{"id":"id","_i":0}})}`
+    )
+    assertCodegen(
+      '<custom :id="id"></custom>',
+      `with(this){return _c('custom',{attrs:{"id":_$s(0,'a-id',id),"_i":0}})}`
+    )
   })
   // TODO 后续优化 dataset
   // it('generate dataset', () => {
@@ -140,11 +152,129 @@ describe('codegen', () => {
       '<view data-a="1" :data-b="b"></view>',
       `with(this){return _c('view',{attrs:{"data-b":_$s(0,'a-data-b',b),"_i":0}})}`
     )
+    assertCodegen(
+      '<custom data-a="1" :data-b="b"></custom>',
+      `with(this){return _c('custom',{attrs:{"data-a":"1","data-b":_$s(0,'a-data-b',b),"_i":0}})}`
+    )
   })
   it('generate v-if directive', () => {
     assertCodegen(
       '<text v-if="a">1</text><text v-else-if="b">2</text><text v-else-if="c">3</text><text v-else>d</text>',
       `with(this){return (_$s(0,'i',a))?_c('text'):(_$s(1,'e',b))?_c('text'):(_$s(2,'e',c))?_c('text'):_c('text')}`
+    )
+  })
+  it('generate dynamic slot', () => {
+    assertCodegen(
+      '<base-layout><template v-slot:[dynamicSlotName]></template></base-layout>',
+      `with(this){return _c('base-layout',{attrs:{"_i":0},scopedSlots:_u([{key:_$s(1,'st',dynamicSlotName),fn:function(_empty_, _svm, _si){return undefined}}],null,true)})}`
+    )
+  })
+
+  it('generate ref', () => {
+    assertCodegen(
+      '<p :ref="component1"></p>',
+      `with(this){return _c('p',{ref:_$s(0,'ref',component1)})}`
+    )
+  })
+
+  it('generate image', () => {
+    assertCodegen(
+      '<image :src="src"/>',
+      `with(this){return _c('image',{attrs:{"src":_$s(0,'a-src',src),"_i":0}})}`
+    )
+    assertCodegen(
+      '<image src="/static/logo.png"/>',
+      `with(this){return _c('image',{attrs:{"_i":0}})}`
+    )
+    assertCodegen(
+      '<image src="../static/logo.png"/>',
+      `with(this){return _c('image',{attrs:{"src":_$s(0,'a-src',require("../static/logo.png")),"_i":0}})}`
+    )
+    assertCodegen(
+      '<image src="@/static/logo.png"/>',
+      `with(this){return _c('image',{attrs:{"_i":0}})}`
+    )
+    assertCodegen(
+      '<image src="~@/static/logo.png"/>',
+      `with(this){return _c('image',{attrs:{"_i":0}})}`
+    )
+  })
+  it('generate text trim', () => {
+    assertCodegen(
+      '<view>text</view>',
+        `with(this){return _c('view')}`
+    )
+
+    assertCodegen(
+      '<view> text </view>',
+        `with(this){return _c('view')}`
+    )
+
+    assertCodegen(
+      '<text>{{line_one_cn+\' \'}}</text>',
+        `with(this){return _c('text',[_v((_$s(0,'t0-0',_s(line_one_cn+' '))))])}`
+    )
+
+    assertCodegen(
+      '<text>{{" "+line_one_cn}}</text>',
+        `with(this){return _c('text',[_v((_$s(0,'t0-0',_s(" "+line_one_cn))))])}`
+    )
+
+    assertCodegen(
+      '<text>\nN: {{title}}\n′</text>',
+        `with(this){return _c('text',[_v((_$s(0,'t0-0',_s(title))))])}`
+    )
+    assertCodegen(
+      '<text>我是第一行\n我的第二行</text>',
+        `with(this){return _c('text')}`
+    )
+    assertCodegen(
+      '<text>我是第一行\n我的第二行1{{title}}</text>',
+        `with(this){return _c('text',[_v((_$s(0,'t0-0',_s(title))))])}`
+    )
+    assertCodegen(
+        `<text>我是第一行
+  我的第二行2{{title}}</text>`,
+        `with(this){return _c('text',[_v((_$s(0,'t0-0',_s(title))))])}`
+    )
+
+    assertCodegen(
+      '<view> text text </view>',
+        `with(this){return _c('view')}`
+    )
+    assertCodegen(
+      '<view>text {{text}} text</view>',
+        `with(this){return _c('view',[_v((_$s(0,'t0-0',_s(text))))])}`
+    )
+    assertCodegen(
+      '<view> text {{text}} 文本 </view>',
+        `with(this){return _c('view',[_v((_$s(0,'t0-0',_s(text))))])}`
+    )
+    assertCodegen(
+      '<view>{{text}} text  text </view>',
+        `with(this){return _c('view',[_v((_$s(0,'t0-0',_s(text))))])}`
+    )
+    assertCodegen(
+      '<view>  {{text}} text  text </view>',
+        `with(this){return _c('view',[_v((_$s(0,'t0-0',_s(text))))])}`
+    )
+    assertCodegen(
+      '<view>{{text}} text  text {{text}}</view>',
+        `with(this){return _c('view',[_v((_$s(0,'t0-0',_s(text)))+(_$s(0,'t0-1',_s(text))))])}`
+    )
+    assertCodegen(
+      '<view>  {{text}} text  text {{text}}  </view>',
+        `with(this){return _c('view',[_v((_$s(0,'t0-0',_s(text)))+(_$s(0,'t0-1',_s(text))))])}`
+    )
+  })
+  it('generate bool attr', () => {
+    assertCodegen(
+      '<video controls/>',
+      `with(this){return _c('video',{attrs:{"_i":0}})}`
+    )
+    assertCodegen(
+      '<video controls=""/>',
+      `with(this){return _c('video',{})}`
     )
   })
 })

@@ -19,7 +19,7 @@ const scopedPath = path.resolve(__dirname, '../../')
 const compiler = require('../lib')
 const res = compiler.compile(
   `
-<view>{{obj.param1}}123123{{obj.param1}}123123{{obj.param1}}<text> -{{obj.param3}}---{{obj.param3}} </text>{{obj.param2}}aaaa{{obj.param2}}aaaa{{obj.param2}}</view>
+<custom data-a="1" :data-b="b"></custom>
 `, {
     miniprogram: true,
     resourcePath: '/User/fxy/Documents/test.wxml',
@@ -33,7 +33,7 @@ const res = compiler.compile(
       platform: 'mp-weixin'
     },
     filterModules: ['swipe'],
-    // service: true,
+    service: true,
     view: true
 
   })

@@ -2,14 +2,16 @@
   <uni-map v-on="$listeners">
     <div
       ref="container"
-      class="uni-map-container" />
+      class="uni-map-container"
+    />
     <v-uni-cover-image
       v-for="(control, index) in mapControls"
       :key="index"
       :src="control.iconPath"
       :style="control.position"
       auto-size
-      @click="controlclick(control)"/>
+      @click="controlclick(control)"
+    />
     <div class="uni-map-slot">
       <slot />
     </div>
@@ -144,7 +146,7 @@ export default {
     },
     mapControls () {
       const list = this.controls.map((control) => {
-        let position = { position: 'absolute' };
+        const position = { position: 'absolute' };
         ['top', 'left', 'width', 'height'].forEach(key => {
           if (control.position[key]) {
             position[key] = control.position[key] + 'px'
@@ -164,7 +166,7 @@ export default {
       this.map && this.map[val ? 'hide' : 'show']()
     },
     scale (val) {
-      this.map && this.map.setZoom(val)
+      this.map && this.map.setZoom(parseInt(val))
     },
     latitude (val) {
       this.map && this.map.setStyles({
@@ -187,15 +189,16 @@ export default {
     }
   },
   mounted () {
-    let mapStyle = Object.assign({}, this.attrs, this.position)
+    const mapStyle = Object.assign({}, this.attrs, this.position)
     if (this.latitude && this.longitude) {
       mapStyle.center = new plus.maps.Point(this.longitude, this.latitude)
     }
     const map = this.map = plus.maps.create(this.$page.id + '-map-' + (this.id || Date.now()), mapStyle)
-    map.__markers__ = {}
+    map.__markers__ = []
+    map.__markers_map__ = {}
     map.__lines__ = []
     map.__circles__ = []
-    map.setZoom(this.scale)
+    map.setZoom(parseInt(this.scale))
     plus.webview.currentWebview().append(map)
     if (this.hidden) {
       map.hide()
@@ -209,7 +212,7 @@ export default {
       this.$trigger('click', {}, e)
     }
     map.onstatuschanged = (e) => {
-      this.$trigger('regionchange', {}, e)
+      this.$trigger('regionchange', {}, {})
     }
     this._addMarkers(this.markers)
     this._addMapLines(this.polyline)
@@ -229,15 +232,19 @@ export default {
       }
       this.map && this[type](data)
     },
-    moveToLocation (data) {
-      this.map.setCenter(new plus.maps.Point(this.longitude, this.latitude))
+    moveToLocation ({ callbackId, longitude, latitude }) {
+      this.map.setCenter(new plus.maps.Point(longitude || this.longitude, latitude || this.latitude))
+      this._publishHandler(callbackId, {
+        errMsg: 'moveToLocation:ok'
+      })
     },
     getCenterLocation ({ callbackId }) {
-      const center = this.map.getCenter()
-      this._publishHandler(callbackId, {
-        longitude: center.longitude,
-        latitude: center.latitude,
-        errMsg: 'getCenterLocation:ok'
+      this.map.getCurrentCenter((state, point) => {
+        this._publishHandler(callbackId, {
+          longitude: point.longitude,
+          latitude: point.latitude,
+          errMsg: 'getCenterLocation:ok'
+        })
       })
     },
     getRegion ({ callbackId }) {
@@ -311,14 +318,23 @@ export default {
           }
         }
         nativeMap.addOverlay(nativeMarker)
-        nativeMap.__markers__[id + ''] = nativeMarker
+        nativeMap.__markers__.push(nativeMarker)
+        nativeMap.__markers_map__[id + ''] = nativeMarker
       })
+    },
+    _clearMarkers () {
+      const map = this.map
+      const markers = map.__markers__
+      markers.forEach(marker => {
+        map.removeOverlay(marker)
+      })
+      map.__markers__ = []
+      map.__markers_map__ = {}
     },
     _addMarkers (markers, clear) {
       if (this.map) {
         if (clear) {
-          this.map.clearOverlays()
-          this.map.__markers__ = {}
+          this._clearMarkers()
         }
         markers.forEach(marker => {
           this._addMarker(this.map, marker)
@@ -339,7 +355,7 @@ export default {
       markerId
     }) {
       if (this.map) {
-        const nativeMarker = this.map.__markers__[markerId + '']
+        const nativeMarker = this.map.__markers_map__[markerId + '']
         if (nativeMarker) {
           nativeMarker.setPoint(new plus.maps.Point(destination.longitude, destination.latitude))
         }

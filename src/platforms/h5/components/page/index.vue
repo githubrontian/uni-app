@@ -1,8 +1,9 @@
 <template>
   <uni-page :data-page="$route.meta.pagePath">
     <page-head
-      v-if="navigationBar.type!=='none'"
-      v-bind="navigationBar" />
+      v-if="!hasTopWindow && navigationBar.type!=='none'"
+      v-bind="navigationBar"
+    />
     <page-refresh
       v-if="enablePullDownRefresh"
       ref="refresh"
@@ -24,13 +25,15 @@
   </uni-page>
 </template>
 <style>
-uni-page {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
+  uni-page {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
 </style>
 <script>
+import Vue from 'vue'
+
 import {
   upx2px
 } from 'uni-helpers/index'
@@ -158,28 +161,37 @@ export default {
       default () {
         return {}
       }
+    },
+    topWindow: {
+      type: Boolean,
+      default: true
     }
   },
   data () {
+    // 目前简单处理，存在topWindow时，始终不显示page head
+    const hasTopWindow = this.topWindow !== false && !!Vue.component('VUniTopWindow')
+    let navigationBar = {}
     const titleNViewTypeList = {
-      'none': 'default',
-      'auto': 'transparent',
-      'always': 'float'
+      none: 'default',
+      auto: 'transparent',
+      always: 'float'
     }
     // 将 navigationStyle 和 transparentTitle 都合并到 titleNView
     let titleNView = this.titleNView
     if ( // 无头
       titleNView === false ||
-      titleNView === 'false' ||
-      (
-        this.navigationStyle === 'custom' &&
-        !isPlainObject(titleNView)
-      ) || (
+        titleNView === 'false' ||
+        (
+          this.navigationStyle === 'custom' &&
+          !isPlainObject(titleNView)
+        ) || (
         this.transparentTitle === 'always' &&
-        !isPlainObject(titleNView)
+          !isPlainObject(titleNView)
       )
     ) {
-      titleNView = { type: 'none' }
+      titleNView = {
+        type: 'none'
+      }
     } else {
       titleNView = Object.assign({}, {
         type: this.navigationStyle === 'custom' ? 'none' : 'default'
@@ -191,11 +203,11 @@ export default {
     }
 
     const yesNoParseList = {
-      'YES': true,
-      'NO': false
+      YES: true,
+      NO: false
     }
 
-    const navigationBar = mergeTitleNView({
+    navigationBar = mergeTitleNView({
       loading: false,
       backButton: !this.isQuit && !this.$route.meta.isQuit, // redirectTo,reLaunch时可能动态修改 meta.isQuit
       backgroundColor: this.navigationBarBackgroundColor,
@@ -228,26 +240,15 @@ export default {
     refreshOptions.range = upx2px(refreshOptions.range)
 
     return {
+      hasTopWindow,
       navigationBar,
       refreshOptions
     }
   },
   created () {
-    if (__PLATFORM__ === 'h5') {
-      const navigationBar = this.navigationBar
-      document.title = navigationBar.titleText
-      if (typeof qh !== 'undefined') {
-        qh.setNavigationBarTitle({
-          title: document.title
-        })
-        qh.setNavigationBarColor({
-          backgroundColor: navigationBar.backgroundColor
-        })
-        qh.setNavigationBarTextStyle({
-          textStyle: navigationBar.textColor === '#000' ? 'black' : 'white'
-        })
-      }
-    }
+    const navigationBar = this.navigationBar
+    document.title = navigationBar.titleText
+    UniServiceJSBridge.emit('onNavigationBarChange', navigationBar)
   }
 }
 </script>

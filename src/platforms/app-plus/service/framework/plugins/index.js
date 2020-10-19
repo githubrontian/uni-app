@@ -4,6 +4,8 @@ import {
   initPolyfill
 } from 'uni-core/service/plugins/polyfill'
 
+import EventChannel from 'uni-helpers/EventChannel'
+
 import {
   registerApp
 } from '../app'
@@ -29,6 +31,13 @@ export default {
 
     initPolyfill(Vue)
 
+    Vue.prototype.getOpenerEventChannel = function () {
+      if (!this.$root.$scope.eventChannel) {
+        this.$root.$scope.eventChannel = new EventChannel()
+      }
+      return this.$root.$scope.eventChannel
+    }
+
     Object.defineProperty(Vue.prototype, '$page', {
       get () {
         return this.$root.$scope.$page
@@ -47,6 +56,21 @@ export default {
     Vue.prototype.$mount = function mount (el, hydrating) {
       if (this.mpType === 'app') {
         this.$options.render = function () {}
+        if (weex.config.preload) { // preload
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[uni-app] preload app-service.js')
+          }
+          const globalEvent = weex.requireModule('globalEvent')
+          globalEvent.addEventListener('launchApp', () => {
+            if (process.env.NODE_ENV !== 'production') {
+              console.log('[uni-app] launchApp')
+            }
+            plus.updateConfigInfo && plus.updateConfigInfo()
+            registerApp(this)
+            oldMount.call(this, el, hydrating)
+          })
+          return
+        }
         registerApp(this)
       }
       return oldMount.call(this, el, hydrating)

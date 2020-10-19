@@ -70,7 +70,7 @@ if (process.env.UNI_USING_V3) {
             let cssVarValue = false
             walk(node.nodes, n => {
               if (n.type === 'word') {
-                if (cssVars.hasOwnProperty(n.value)) { // 目前仅考虑 nodes 长度为0
+                if (Object.prototype.hasOwnProperty.call(cssVars, n.value)) { // 目前仅考虑 nodes 长度为0
                   cssVarValue = cssVars[n.value]
                 }
               }
@@ -105,6 +105,7 @@ if (process.env.UNI_USING_V3) {
     'checkbox-group',
     'cover-image',
     'cover-view',
+    'editor',
     'form',
     'functional-page-navigator',
     'icon',
@@ -241,7 +242,7 @@ if (process.env.UNI_USING_V3) {
             // Transform each property declaration here
             decl.value = tranformValue(decl, opts)
           })
-          if (process.env.UNI_PLATFORM !== 'quickapp') {
+          if (process.env.UNI_PLATFORM !== 'quickapp-native') {
             rule.selectors = rule.selectors.map(complexSelector => {
               return transformSelector(complexSelector, simpleSelectors => {
                 return simpleSelectors.walkTags(tag => {

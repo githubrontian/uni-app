@@ -413,7 +413,8 @@ BindingX类似一种强化版的css，运行性能高，但没有js那样足够�
 				}, function(res) {
 					if (res.state === 'exit') {
 						Binding.unbind({
-							token: main_binding
+							token: main_binding.token,
+  						eventType: 'timing'
 						})
 					}
 				});
@@ -436,7 +437,8 @@ BindingX类似一种强化版的css，运行性能高，但没有js那样足够�
 				}, function(res) {
 					if (res.state === 'exit') {
 						Binding.unbind({
-							token: btn_binding
+							token: btn_binding.token,
+  						eventType: 'timing'
 						})
 					}
 				})
@@ -462,7 +464,8 @@ BindingX类似一种强化版的css，运行性能高，但没有js那样足够�
 				}, function(res) {
 					if (res.state === 'exit') {
 						Binding.unbind({
-							token: main_binding
+							token: main_binding.token,
+  						eventType: 'timing'
 						})
 					}
 				});
@@ -485,7 +488,8 @@ BindingX类似一种强化版的css，运行性能高，但没有js那样足够�
 				}, function(res) {
 					if (res.state === 'exit') {
 						Binding.unbind({
-							token: btn_binding
+							token: btn_binding.token,
+  						eventType: 'timing'
 						})
 					}
 				})
@@ -569,6 +573,7 @@ canvas API使用，详见canvas文档。
 ## nvue开发与vue开发的常见区别
 基于原生引擎的渲染，虽然还是前端技术栈，但和web开发肯定是有区别的。
 
+- nvue 页面控制显隐只可以使用`v-if`不可以使用`v-show`
 - nvue 页面只能使用 flex 布局，不支持其他布局方式。页面开发前，首先想清楚这个页面的纵向内容有什么，哪些是要滚动的，然后每个纵向内容的横轴排布有什么，按 flex 布局设计好界面。
 - 原生开发没有页面滚动的概念，页面内容高过屏幕高度并不会自动滚动，只有部分组件可滚动（list、waterfall、scroll-view/scroller），要滚得内容需要套在可滚动组件下。这不符合前端开发的习惯，所以在 nvue 编译为 uni-app模式时，给页面外层自动套了一个 scroller，页面内容过高会自动滚动。（组件不会套，页面有recycle-list时也不会套）。后续会提供配置，可以设置不自动套。
 - 文字内容，必须、只能在`<text>`组件下。不能在`<div>`、`<view>`的text区域里直接写文字。否则即使渲染了，也无法绑定js里的变量。
@@ -593,6 +598,7 @@ canvas API使用，详见canvas文档。
 下面有些正确和错误的写法示例对比：
 
 - 选择器仅支持class 选择器
+
 ```css
 
 /* 错误 */
@@ -638,6 +644,7 @@ canvas API使用，详见canvas文档。
 ```
 
 - nvue的`uni-app`编译模式下，`App.vue` 中的样式，会编译到每个 `nvue文件`。对于共享样式，如果有不合法属性控制台会给出警告，可以通过条件编译`APP-PLUS-NVUE`屏蔽 `App` 中的警告。
+
 ```css
 /* 错误 */
 /*  控制台警告：
@@ -660,9 +667,10 @@ WARNING: `-webkit-transform` is not a standard property name (may not be support
 }
 
 ```
+
 ## Android平台阴影(box-shadow)问题
 
-Android平台weex对阴影样式(`box-shadow`)支持不完善，如设置圆角边框时阴影样式显示不正常、设置动画时在`Android7`上显示不正常等。为解决这些问题，从HBuilderX 2.4.7起，新增`elevation`属性（组件的属性，不是css样式）设置组件的层级，`Number`类型，层级值越大阴影越明显，阴影效果也与组件位置有关，越靠近页面底部阴影效果越明显
+Android平台weex对阴影样式(`box-shadow`)支持不完善，如设置圆角边框时阴影样式显示不正常、设置动画时在`Android7`上显示不正常、在`Android10`上出现闪烁现象等。为解决这些问题，从HBuilderX 2.4.7起，新增`elevation`属性（组件的属性，不是css样式）设置组件的层级，`Number`类型，层级值越大阴影越明显，阴影效果也与组件位置有关，越靠近页面底部阴影效果越明显
 
 **用法**
 
@@ -672,6 +680,30 @@ Android平台weex对阴影样式(`box-shadow`)支持不完善，如设置圆角�
 
 **注意**
 
+- 设置elevation属性产生的阴影暂时无法修改颜色
 - 为了避免`elevation`属性的阴影效果与阴影样式(`box-shadow`)冲突，设置`elevation`属性后`box-shadow`样式失效
 - 使用`elevation`需要阴影元素的父元素大于阴影范围，否则会对阴影进行裁剪
+- IOS不支持`elevation`属性，请使用`box-shadow`设置阴影
+
+## iOS平台下拉组件refresh组件注意问题
+
+iOS平台默认情况下滚动容器组件（如list、waterfall组件）内容不足时，由于没有撑满容器的可视区域会导致无法上下滚动，此时无法操作下拉刷新功能，无法触发refresh组件的@refresh、@pullingdown事件。
+此时可在容器组件中配置alwaysScrollableVertical属性值为true来设置支持上下滚动，支持下拉刷新操作。
+
+**用法**
+```
+<list class="scroll-v list" enableBackToTop="true" scroll-y alwaysScrollableVertical="true">
+  <refresh class="refresh" @refresh="onrefresh()" @pullingdown="onpullingdown">
+    //refresh content
+  </refresh>
+  <cell v-for="(newsitem,index) in list" :key="newsitem.id">
+    //cell content
+  </cell>
+</list>
+```
+
+**注意**
+- Android平台不存在此问题
+
+
 

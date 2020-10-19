@@ -9,6 +9,7 @@ const {
 } = require('@dcloudio/uni-cli-shared')
 
 const {
+  hasOwn,
   parseStyle
 } = require('../../util')
 
@@ -55,7 +56,42 @@ function normalizeNetworkTimeout (appJson) {
   }
 }
 
-module.exports = function (pagesJson, userManifestJson) {
+function updateFileFlag (appJson) {
+  // 已经不再根据文件识别,理论可废弃此处的逻辑
+  if (
+    process.env.UNI_USING_V3 ||
+    process.env.UNI_USING_V3_NATIVE
+  ) {
+    return
+  }
+  const nvueCompilerFilePath = path.resolve(process.env.UNI_OUTPUT_DIR, '__uniappnvuecompiler.js')
+  const nvueCompilerExists = fs.existsSync(nvueCompilerFilePath)
+
+  if (appJson.nvueCompiler === 'uni-app') {
+    if (!nvueCompilerExists) {
+      fsExtra.outputFile(nvueCompilerFilePath, '')
+    }
+  } else {
+    if (nvueCompilerExists) {
+      fs.unlinkSync(nvueCompilerFilePath)
+    }
+  }
+
+  const rendererFilePath = path.resolve(process.env.UNI_OUTPUT_DIR, '__uniapprenderer.js')
+  const rendererExists = fs.existsSync(rendererFilePath)
+
+  if (appJson.renderer === 'native') {
+    if (!rendererExists) {
+      fsExtra.outputFile(rendererFilePath, '')
+    }
+  } else {
+    if (rendererExists) {
+      fs.unlinkSync(rendererFilePath)
+    }
+  }
+}
+
+module.exports = function (pagesJson, userManifestJson, isAppView) {
   const {
     app
   } = require('../mp')(pagesJson, userManifestJson)
@@ -69,7 +105,7 @@ module.exports = function (pagesJson, userManifestJson) {
   const {
     navigationBarTextStyle = 'white',
     navigationBarBackgroundColor = '#000000'
-  } = appJson['window'] || {}
+  } = appJson.window || {}
 
   const TABBAR_HEIGHT = 50
 
@@ -97,10 +133,9 @@ module.exports = function (pagesJson, userManifestJson) {
     }
   )
 
-  const splashscreenOptions = userManifestJson['app-plus'] && userManifestJson['app-plus']['splashscreen']
+  const splashscreenOptions = userManifestJson['app-plus'] && userManifestJson['app-plus'].splashscreen
 
-  const hasAlwaysShowBeforeRender = splashscreenOptions && splashscreenOptions.hasOwnProperty(
-    'alwaysShowBeforeRender')
+  const hasAlwaysShowBeforeRender = splashscreenOptions && hasOwn(splashscreenOptions, 'alwaysShowBeforeRender')
 
   // 转换为老版本配置
   if (manifestJson.plus.modules) {
@@ -145,7 +180,7 @@ module.exports = function (pagesJson, userManifestJson) {
     manifestJson.permissions = {}
   }
 
-  const nvuePages = pagesJson.nvue && pagesJson.nvue.pages
+  const nvuePages = process.env.UNI_USING_V3_NATIVE ? pagesJson.pages : (pagesJson.nvue && pagesJson.nvue.pages)
 
   if (nvuePages && nvuePages.length) {
     const pages = {}
@@ -154,8 +189,8 @@ module.exports = function (pagesJson, userManifestJson) {
       style
     }) => {
       pages[path] = {
-        'window': parseStyle(style),
-        'nvue': true
+        window: parseStyle(style),
+        nvue: true
       }
     })
 
@@ -163,17 +198,20 @@ module.exports = function (pagesJson, userManifestJson) {
       pages
     }
 
-    if (pagesJson.nvue.entryPagePath) {
+    if (process.env.UNI_USING_V3_NATIVE) {
+      appJson.nvue.entryPagePath = nvuePages[0]
+    } else if (pagesJson.nvue.entryPagePath) {
       appJson.nvue.entryPagePath = pagesJson.nvue.entryPagePath
     }
+
     // nvue 权限
     manifestJson.permissions.UniNView = {
-      'description': 'UniNView原生渲染'
+      description: 'UniNView原生渲染'
     }
   } else if (process.env.UNI_USING_V8) {
     // nvue 权限
     manifestJson.permissions.UniNView = {
-      'description': 'UniNView原生渲染'
+      description: 'UniNView原生渲染'
     }
   }
 
@@ -200,7 +238,7 @@ module.exports = function (pagesJson, userManifestJson) {
     // "render": "always"
     if (!manifestJson.plus.launchwebview) {
       manifestJson.plus.launchwebview = {
-        'render': 'always'
+        render: 'always'
       }
     } else if (!manifestJson.plus.launchwebview.render) {
       manifestJson.plus.launchwebview.render = 'always'
@@ -239,31 +277,7 @@ module.exports = function (pagesJson, userManifestJson) {
     appJson.renderer = 'auto'
   }
 
-  const nvueCompilerFilePath = path.resolve(process.env.UNI_OUTPUT_DIR, '__uniappnvuecompiler.js')
-  const nvueCompilerExists = fs.existsSync(nvueCompilerFilePath)
-
-  if (appJson.nvueCompiler === 'uni-app') {
-    if (!nvueCompilerExists) {
-      fsExtra.outputFile(nvueCompilerFilePath, '')
-    }
-  } else {
-    if (nvueCompilerExists) {
-      fs.unlinkSync(nvueCompilerFilePath)
-    }
-  }
-
-  const rendererFilePath = path.resolve(process.env.UNI_OUTPUT_DIR, '__uniapprenderer.js')
-  const rendererExists = fs.existsSync(rendererFilePath)
-
-  if (appJson.renderer === 'native') {
-    if (!rendererExists) {
-      fsExtra.outputFile(rendererFilePath, '')
-    }
-  } else {
-    if (rendererExists) {
-      fs.unlinkSync(rendererFilePath)
-    }
-  }
+  updateFileFlag(appJson)
 
   appJson.splashscreen = {
     alwaysShowBeforeRender: false, // 是否启用白屏检测 关闭 splash
@@ -325,6 +339,10 @@ module.exports = function (pagesJson, userManifestJson) {
     const nvuePages = (appJson.nvue && appJson.nvue.pages) || {}
     for (const key in confusion.resources) {
       if (path.extname(key) === '.js') { // 支持 js 混淆，过滤掉
+        // 静态 js 文件
+        if (key.indexOf('hybrid/html') === 0 || key.indexOf('static/') === 0 || key.indexOf('/static/') !== -1) {
+          resources[key] = confusion.resources[key]
+        }
         continue
       }
       if (!/\.nvue$/.test(key)) {
@@ -334,9 +352,11 @@ module.exports = function (pagesJson, userManifestJson) {
       }
       if (!Object.keys(nvuePages).find(path => {
         const subNVues = nvuePages[path].window.subNVues || []
-        return path.replace(/\.html$/, '.nvue') === key || subNVues.find(({
-          path
-        }) => path === key.replace(/\.nvue$/, ''))
+        // TODO
+        return (path.replace(/\.html$/, '.nvue') === key || path.replace(/\.html$/, '.nvue') + '.nvue' === key) ||
+            subNVues.find(({
+              path
+            }) => path === key.replace(/\.nvue$/, ''))
       }) && !pagesJson.pages.find(({
         style = {}
       }) => {
@@ -356,10 +376,17 @@ module.exports = function (pagesJson, userManifestJson) {
   const uniApp = require('../../../package.json')['uni-app']
   manifestJson.plus['uni-app'] = uniApp
   // 控制页类型
-  const control = process.env.UNI_USING_V3 ? 'uni-v3' : (process.env.UNI_USING_V8 ? 'v8' : 'webview')
+  const control = (process.env.UNI_USING_V3 || process.env.UNI_USING_V3_NATIVE)
+    ? 'uni-v3'
+    : (process.env.UNI_USING_V8 ? 'v8' : 'webview')
+
   manifestJson.plus['uni-app'].control = control
   manifestJson.plus['uni-app'].nvueCompiler = appJson.nvueCompiler
-  manifestJson.plus['uni-app'].renderer = appJson.renderer
+  // v3 + native 时强制 auto
+  manifestJson.plus['uni-app'].renderer = process.env.UNI_USING_V3_NATIVE
+    ? 'auto'
+    : appJson.renderer
+
   if (flexDir) {
     manifestJson.plus['uni-app'].nvue = {
       'flex-direction': flexDir
@@ -460,12 +487,16 @@ module.exports = function (pagesJson, userManifestJson) {
 
   manifest.content = manifestJson
 
+  const subPackages = []
   // 分包合并
   if (appJson.subPackages && appJson.subPackages.length) {
     appJson.subPackages.forEach(subPackage => {
       if (subPackage.pages && subPackage.pages.length) {
         subPackage.pages.forEach(page => {
           appJson.pages.push(normalizePath(path.join(subPackage.root, page)))
+        })
+        subPackages.push({
+          root: subPackage.root
         })
       }
     })
@@ -480,12 +511,15 @@ module.exports = function (pagesJson, userManifestJson) {
     return [manifest, parseConfig(appJson)]
   }
 
-  if (process.env.UNI_USING_V3) {
+  if (process.env.UNI_USING_V3 || process.env.UNI_USING_V3_NATIVE) {
+    if (process.env.UNI_USING_V3 && process.env.UNI_OPT_SUBPACKAGES) {
+      appJson.subPackages = subPackages
+    }
     return require('./index.v3')(appJson, manifestJson, {
       manifest,
       pagesJson,
       normalizeNetworkTimeout
-    })
+    }, isAppView)
   }
   return [app, manifest]
 }

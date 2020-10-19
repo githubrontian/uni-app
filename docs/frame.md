@@ -17,7 +17,8 @@
 
 <pre v-pre="" data-lang="">
 	<code class="lang-" style="padding:0">
-┌─components            uni-app组件目录
+┌─cloudfunctions        云函数目录（阿里云为aliyun，腾讯云为tcb，详见<a href="https://uniapp.dcloud.io/uniCloud/">uniCloud</a>）
+│─components            符合vue组件规范的uni-app组件目录
 │  └─comp-a.vue         可复用的a组件
 ├─hybrid                存放本地网页的目录，<a href="/component/web-view">详见</a>
 ├─platforms             存放各平台专用页面的目录，<a href="/platform?id=%E6%95%B4%E4%BD%93%E7%9B%AE%E5%BD%95%E6%9D%A1%E4%BB%B6%E7%BC%96%E8%AF%91">详见</a>
@@ -71,6 +72,8 @@
 - 引入的静态资源在非h5平台，均不转为base64。
 - H5平台，小于4kb的资源会被转换成base64，其余不转。
 - 自`HBuilderX 2.6.6-alpha`起`template`内支持`@`开头路径引入静态资源，旧版本不支持此方式
+- App平台自`HBuilderX 2.6.9-alpha`起`template`节点中引用静态资源文件时（如：图片），调整查找策略为【基于当前文件的路径搜索】，与其他平台保持一致
+- 支付宝小程序组件内 image 标签不可使用相对路径
 
 ### js文件引入
 
@@ -89,7 +92,7 @@ import add from '../../common/add.js'
 
 ### css引入静态资源
 
-> `css`文件或`style标签`内引入`css`文件时（scss、less文件同理），只能使用相对路径
+> `css`文件或`style标签`内引入`css`文件时（scss、less文件同理），可以使用相对路径或绝对路径（`HBuilderX 2.6.6-alpha`）
 
 ```css
 /* 绝对路径 */
@@ -135,6 +138,9 @@ background-image: url(../../static/logo.png);
 |onHide|当 ``uni-app`` 从前台进入后台|
 |onError|当 `uni-app` 报错时触发	|
 |onUniNViewMessage|对 ``nvue`` 页面发送的数据进行监听，可参考 [nvue 向 vue 通讯](/use-weex?id=nvue-向-vue-通讯)|
+|onUnhandledRejection|对未处理的 Promise 拒绝事件监听函数（2.8.1+）|
+|onPageNotFound|页面不存在监听函数|
+|onThemeChange|监听系统主题变化|
 
 **注意**
 
@@ -163,6 +169,8 @@ background-image: url(../../static/logo.png);
 |onNavigationBarSearchInputChanged|监听原生标题栏搜索输入框输入内容变化事件|App、H5|1.6.0|
 |onNavigationBarSearchInputConfirmed|监听原生标题栏搜索输入框搜索事件，用户点击软键盘上的“搜索”按钮时触发。|App、H5|1.6.0|
 |onNavigationBarSearchInputClicked|监听原生标题栏搜索输入框点击事件|App、H5|1.6.0|
+|onShareTimeline|监听用户点击右上角转发到朋友圈|微信小程序|2.8.1+|
+|onAddToFavorites|监听用户点击右上角收藏|微信小程序|2.8.1+|
 
 ``onPageScroll`` 参数说明：
 
@@ -182,6 +190,7 @@ background-image: url(../../static/logo.png);
 - onTabItemTap常用于点击当前tabitem，滚动或刷新当前页面。如果是点击不同的tabitem，一定会触发页面切换。
 - 如果想在App端实现点击某个tabitem不跳转页面，不能使用onTabItemTap，可以使用[plus.nativeObj.view](http://www.html5plus.org/doc/zh_cn/nativeobj.html)放一个区块盖住原先的tabitem，并拦截点击事件。
 - onTabItemTap在App端，从HBuilderX 1.9 的自定义组件编译模式开始支持。
+- 避免在 onShow 里使用需要权限的 API（比如 setScreenBrightness() 等需要手机权限）, 可能会再次触发onShow造成死循环。
 
 ``onNavigationBarButtonTap`` 参数说明：
 
@@ -304,10 +313,10 @@ switch(uni.getSystemInfoSync().platform){
 `uni-app` 支持的通用 css 单位包括 px、rpx
 
 - px 即屏幕像素
-- rpx 即响应式px，一种根据屏幕宽度自适应的动态单位。以750宽的屏幕为基准，750rpx恰好为屏幕宽度。屏幕变宽，rpx 实际显示效果会等比放大。
+- rpx 即响应式px，一种根据屏幕宽度自适应的动态单位。以750宽的屏幕为基准，750rpx恰好为屏幕宽度。屏幕变宽，rpx 实际显示效果会等比放大，但在 App 端和 H5 端屏幕宽度达到 960px 时，默认将按照 375px 的屏幕宽度进行计算，具体配置参考：[rpx计算配置](https://uniapp.dcloud.io/collocation/pages?id=globalstyle) 。
 
 vue页面支持普通H5单位，但在nvue里不支持：
-- rem 默认根字体大小为 屏幕宽度/20（微信小程序、字节跳动小程序、App、H5）<span style="display:none">百度小程序16px、支付宝小程序50px</span>
+- rem 根字体大小可以通过 [page-meta](/component/page-meta?id=page-meta) 配置<span style="display:none">字节跳动小程序：屏幕宽度/20、百度小程序：16px、支付宝小程序：50px</span>
 - vh viewpoint height，视窗高度，1vh等于视窗高度的1%
 - vw viewpoint width，视窗宽度，1vw等于视窗宽度的1%
 
@@ -329,7 +338,7 @@ nvue中，uni-app 模式（[nvue 不同编译模式介绍](https://ask.dcloud.ne
 
 而且主要是宽度变形。高度一般因为有滚动条，不容易出问题。由此，引发了较强的动态宽度单位需求。
 
-微信小程序设计了 rpx 解决这个问题，`uni-app` 在 App 端、H5 端都支持了 `rpx`。
+微信小程序设计了 rpx 解决这个问题。`uni-app` 在 App 端、H5 端都支持了 `rpx`，并且可以配置不同屏幕宽度的计算方式，具体参考：[rpx计算配置](https://uniapp.dcloud.io/collocation/pages?id=globalstyle)。
 
 rpx 是相对于基准宽度的单位，可以根据屏幕宽度进行自适应。```uni-app``` 规定屏幕基准宽度 750rpx。
 
@@ -402,6 +411,7 @@ rpx 是相对于基准宽度的单位，可以根据屏幕宽度进行自适应�
 **注意：** 
 - 在 ```uni-app``` 中不能使用 ```*``` 选择器。
 - ```page``` 相当于 ```body``` 节点，例如：
+- 微信小程序自定义组件中仅支持 class 选择器
 ```css
 <!-- 设置页面背景颜色 -->
 page {
@@ -596,6 +606,8 @@ domModule.addRule('fontFace', {
 
  ``<template/>`` 和 ``<block/>`` 并不是一个组件，它们仅仅是一个包装元素，不会在页面中做任何渲染，只接受控制属性。
  
+ ``<block/>`` 在不同的平台表现存在一定差异，推荐统一使用 ``<template/>``。
+ 
 **代码示例**
  
 ```html
@@ -751,6 +763,9 @@ const package = require('packageName')
 
 ## TypeScript 支持
 在 uni-app 中使用 ts 开发，请参考 [Vue.js TypeScript 支持](https://cn.vuejs.org/v2/guide/typescript.html) 说明。
+
+
+类型定义文件由 @dcloudio/types 模块提供，安装后请注意配置 tsconfig.json 文件中的 compilerOptions > types 部分，如需其他小程序平台类型定义也可以安装，如：miniprogram-api-typings、mini-types。对于缺少或者错误的类型定义，可以自行在本地新增或修改并同时报告给官方请求更新。
 
 ### 注意事项
 在 uni-app 中使用 ts 需要注意以下事项。
@@ -1280,8 +1295,6 @@ export default {
 |:-:|:-:|:-:|:-:|:-:|:-:|:-:|
 |√(2.5.5+，仅支持vue，并要求v3编译器)|√|x|x|x|x|x|
 
-renderjs，以 vue 组件的写法运行在 view 层。
-
 ### 使用方式
 
 设置 script 节点的 lang 为 renderjs
@@ -1323,12 +1336,14 @@ renderjs，以 vue 组件的写法运行在 view 层。
 
 ### 注意事项
 
-* 可以使用 dom、bom API 不可直接访问逻辑层数据
-* 视图层和逻辑层通讯方式与 [WXS](?id=wxs) 一致
-* 观测更新的数据在 view 层可以直接访问到
-* 不要直接引用大型类库，推荐通过动态创建 script 方式引用
-* view 层的页面引用资源的路径相对于根目录计算，例如：./static/test.js
-* 目前仅支持内联使用
+* 目前仅支持内联使用。
+* 不要直接引用大型类库，推荐通过动态创建 script 方式引用。
+* 可以使用 vue 组件的生命周期不可以使用 App、Page 的生命周期
+* 视图层和逻辑层通讯方式与 [WXS](frame?id=wxs) 一致，另外可以通过 this.$ownerInstance 获取当前组件的 ComponentDescriptor 实例。
+* 观测更新的数据在视图层可以直接访问到。
+* APP 端视图层的页面引用资源的路径相对于根目录计算，例如：./static/test.js。
+* APP 端可以使用 dom、bom API，不可直接访问逻辑层数据，不可以使用 uni 相关接口（如：uni.request）
+* H5 端逻辑层和视图层实际运行在同一个环境中，相当于使用 mixin 方式，可以直接访问逻辑层数据。
 
 
 ## 致谢

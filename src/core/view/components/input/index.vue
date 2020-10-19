@@ -1,24 +1,29 @@
 <template>
   <uni-input
     @change.stop
-    v-on="$listeners">
+    v-on="$listeners"
+  >
     <div
       ref="wrapper"
-      class="uni-input-wrapper">
+      class="uni-input-wrapper"
+    >
       <div
-        v-show="!(composing || inputValue.length)"
+        v-show="!(composing || valueSync.length)"
         ref="placeholder"
         :style="placeholderStyle"
         :class="placeholderClass"
         class="uni-input-placeholder"
-      >{{ placeholder }}</div>
+        v-text="placeholder"
+      />
       <input
         ref="input"
-        v-model="inputValue"
+        v-model="valueSync"
+        v-keyboard
         :disabled="disabled"
         :type="inputType"
         :maxlength="maxlength"
         :step="step"
+        :autofocus="focus"
         class="uni-input-input"
         autocomplete="off"
         @focus="_onFocus"
@@ -33,25 +38,16 @@
 </template>
 <script>
 import {
-  emitter,
-  keyboard
+  baseInput
 } from 'uni-mixins'
 const INPUT_TYPES = ['text', 'number', 'idcard', 'digit', 'password']
 const NUMBER_TYPES = ['number', 'digit']
 export default {
   name: 'Input',
-  mixins: [emitter, keyboard],
-  model: {
-    prop: 'value',
-    event: 'update:value'
-  },
+  mixins: [baseInput],
   props: {
     name: {
       type: String,
-      default: ''
-    },
-    value: {
-      type: [String, Number],
       default: ''
     },
     type: {
@@ -72,7 +68,7 @@ export default {
     },
     placeholderClass: {
       type: String,
-      default: ''
+      default: 'input-placeholder'
     },
     disabled: {
       type: [Boolean, String],
@@ -93,7 +89,6 @@ export default {
   },
   data () {
     return {
-      inputValue: this.value + '',
       composing: false,
       wrapperHeight: 0,
       cachedValue: ''
@@ -125,18 +120,12 @@ export default {
     }
   },
   watch: {
-    focus (value) {
-      value && this._focusInput()
-    },
-    value (value) {
-      this.inputValue = value + ''
-    },
-    inputValue (value) {
-      this.$emit('update:value', value)
+    focus (val) {
+      this.$refs.input && this.$refs.input[val ? 'focus' : 'blur']()
     },
     maxlength (value) {
-      const realValue = this.inputValue.slice(0, parseInt(value, 10))
-      realValue !== this.inputValue && (this.inputValue = realValue)
+      const realValue = this.valueSync.slice(0, parseInt(value, 10))
+      realValue !== this.valueSync && (this.valueSync = realValue)
     }
   },
   created () {
@@ -165,10 +154,6 @@ export default {
       }
       $vm = $vm.$parent
     }
-
-    this.initKeyboard(this.$refs.input)
-
-    this.focus && this._focusInput()
   },
   beforeDestroy () {
     this.$dispatch('Form', 'uni-form-group-update', {
@@ -193,11 +178,11 @@ export default {
       if (~NUMBER_TYPES.indexOf(this.type)) {
         if (this.$refs.input.validity && !this.$refs.input.validity.valid) {
           $event.target.value = this.cachedValue
-          this.inputValue = $event.target.value
+          this.valueSync = $event.target.value
           // 输入非法字符不触发 input 事件
           return
         } else {
-          this.cachedValue = this.inputValue
+          this.cachedValue = this.valueSync
         }
       }
 
@@ -206,14 +191,13 @@ export default {
         const maxlength = parseInt(this.maxlength, 10)
         if (maxlength > 0 && $event.target.value.length > maxlength) {
           $event.target.value = $event.target.value.slice(0, maxlength)
-          this.inputValue = $event.target.value
+          this.valueSync = $event.target.value
           // 字符长度超出范围不触发 input 事件
           return
         }
       }
-
-      this.$trigger('input', $event, {
-        value: this.inputValue
+      this.$triggerInput($event, {
+        value: this.valueSync
       })
     },
     _onFocus ($event) {
@@ -226,29 +210,21 @@ export default {
         value: $event.target.value
       })
     },
-    _focusInput () {
-      setTimeout(() => {
-        this.$refs.input.focus()
-      }, 350)
-    },
-    _blurInput () {
-      setTimeout(() => {
-        this.$refs.input.blur()
-      }, 350)
-    },
     _onComposition ($event) {
       if ($event.type === 'compositionstart') {
         this.composing = true
       } else {
         this.composing = false
+        // 部分输入法 compositionend 事件可能晚于 input
+        this._onInput($event)
       }
     },
     _resetFormData () {
-      this.inputValue = ''
+      this.valueSync = ''
     },
     _getFormData () {
       return this.name ? {
-        value: this.inputValue,
+        value: this.valueSync,
         key: this.name
       } : {}
     }
@@ -291,7 +267,7 @@ uni-input[hidden] {
 }
 
 .uni-input-placeholder,
-.uni-input-input{
+.uni-input-input {
   width: 100%;
 }
 

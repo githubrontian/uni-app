@@ -23,7 +23,7 @@ function wrapper (webview) {
     return
   }
   const maskColor = webview.__uniapp_mask
-  let maskWebview = webview.__uniapp_mask_id === '0' ? {
+  const maskWebview = webview.__uniapp_mask_id === '0' ? {
     setStyle ({
       mask
     }) {
@@ -63,10 +63,13 @@ function wrapper (webview) {
 
 export function getSubNVueById (id) {
   const webview = plus.webview.getWebviewById(id)
+  if (webview === null || webview === undefined) {
+    throw new Error('Unable to find SubNVue, id=' + id)
+  }
   if (webview && !webview.$processed) {
     wrapper(webview)
   }
-  let oldSetStyle = webview.setStyle
+  const oldSetStyle = webview.setStyle
   var parentWebview = plus.webview.getWebviewById(webview.__uniapp_mask_id)
   webview.setStyle = function (style) {
     if (style && style.mask) {

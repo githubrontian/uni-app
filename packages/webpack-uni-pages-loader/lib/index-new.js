@@ -17,6 +17,11 @@ const {
 } = require('@dcloudio/uni-cli-shared/lib/cache')
 
 const {
+  initTheme,
+  parseTheme
+} = require('@dcloudio/uni-cli-shared/lib/theme')
+
+const {
   // pagesJsonJsFileName,
   initAutoImportComponents
 } = require('@dcloudio/uni-cli-shared/lib/pages')
@@ -32,8 +37,10 @@ function renameUsingComponents (jsonObj) {
   return jsonObj
 }
 
-module.exports = function (content) {
+module.exports = function (content, map) {
   this.cacheable && this.cacheable()
+
+  initTheme()
 
   let isAppView = false
   if (this.resourceQuery) {
@@ -48,12 +55,17 @@ module.exports = function (content) {
   // this.addDependency(pagesJsonJsPath)
   this.addDependency(manifestJsonPath)
 
-  const pagesJson = parsePagesJson(content, {
+  let pagesJson = parsePagesJson(content, {
     addDependency: (file) => {
       (process.UNI_PAGES_DEPS || (process.UNI_PAGES_DEPS = new Set())).add(normalizePath(file))
       this.addDependency(file)
     }
   })
+
+  if (global.uniPlugin.defaultTheme) {
+    pagesJson = parseTheme(pagesJson)
+    this.addDependency(path.resolve(process.env.UNI_INPUT_DIR, 'theme.json'))
+  }
 
   // 组件自动导入配置
   process.UNI_AUTO_SCAN_COMPONENTS = !(pagesJson.easycom && pagesJson.easycom.autoscan === false)
@@ -67,10 +79,10 @@ module.exports = function (content) {
   }
 
   if (process.env.UNI_PLATFORM === 'h5') {
-    return require('./platforms/h5')(pagesJson, manifestJson)
+    return this.callback(null, require('./platforms/h5')(pagesJson, manifestJson, this), map)
   }
-  if (process.env.UNI_PLATFORM === 'quickapp') {
-    return require('./platforms/quickapp')(pagesJson, manifestJson, this)
+  if (process.env.UNI_PLATFORM === 'quickapp-native') {
+    return this.callback(null, require('./platforms/quickapp-native')(pagesJson, manifestJson, this), map)
   }
 
   if (!process.env.UNI_USING_V3) {
@@ -83,7 +95,7 @@ module.exports = function (content) {
     })
   }
 
-  const jsonFiles = require('./platforms/' + process.env.UNI_PLATFORM)(pagesJson, manifestJson)
+  const jsonFiles = require('./platforms/' + process.env.UNI_PLATFORM)(pagesJson, manifestJson, isAppView)
 
   if (jsonFiles && jsonFiles.length) {
     if (process.env.UNI_USING_V3) {
@@ -104,20 +116,20 @@ module.exports = function (content) {
           }
         }
       })
-      return appConfigContent
+      return this.callback(null, appConfigContent, map)
     }
-    if (process.env.UNI_USING_NATIVE) {
+    if (process.env.UNI_USING_NATIVE || process.env.UNI_USING_V3_NATIVE) {
       let appConfigContent = ''
       jsonFiles.forEach(jsonFile => {
         if (jsonFile) {
-          if (jsonFile.name === 'app-config.js') {
+          if (jsonFile.name === 'app-config.js' || jsonFile.name === 'define-pages.js') {
             appConfigContent = jsonFile.content
           } else {
             this.emitFile(jsonFile.name, jsonFile.content)
           }
         }
       })
-      return appConfigContent
+      return this.callback(null, appConfigContent, map)
     }
 
     jsonFiles.forEach(jsonFile => {
@@ -131,5 +143,5 @@ module.exports = function (content) {
     })
   }
 
-  return ''
+  this.callback(null, '', map)
 }

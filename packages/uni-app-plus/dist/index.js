@@ -134,7 +134,7 @@ function queue (hooks, data) {
   for (let i = 0; i < hooks.length; i++) {
     const hook = hooks[i];
     if (promise) {
-      promise = Promise.then(wrapperHook(hook));
+      promise = Promise.resolve(wrapperHook(hook));
     } else {
       const res = hook(data);
       if (isPromise(res)) {
@@ -235,12 +235,16 @@ const SYNC_API_RE =
 
 const CONTEXT_API_RE = /^create|Manager$/;
 
+// Context例外情况
+const CONTEXT_API_RE_EXC = ['createBLEConnection'];
+
+// 同步例外情况
 const ASYNC_API = ['createBLEConnection'];
 
-const CALLBACK_API_RE = /^on/;
+const CALLBACK_API_RE = /^on|^off/;
 
 function isContextApi (name) {
-  return CONTEXT_API_RE.test(name)
+  return CONTEXT_API_RE.test(name) && CONTEXT_API_RE_EXC.indexOf(name) === -1
 }
 function isSyncApi (name) {
   return SYNC_API_RE.test(name) && ASYNC_API.indexOf(name) === -1
@@ -332,9 +336,9 @@ function upx2px (number, newDeviceWidth) {
   result = Math.floor(result + EPS);
   if (result === 0) {
     if (deviceDPR === 1 || !isIOS) {
-      return 1
+      result = 1;
     } else {
-      return 0.5
+      result = 0.5;
     }
   }
   return number < 0 ? -result : result
@@ -344,14 +348,12 @@ const interceptors = {
   promiseInterceptor
 };
 
-
-
 var baseApi = /*#__PURE__*/Object.freeze({
   __proto__: null,
   upx2px: upx2px,
-  interceptors: interceptors,
   addInterceptor: addInterceptor,
-  removeInterceptor: removeInterceptor
+  removeInterceptor: removeInterceptor,
+  interceptors: interceptors
 });
 
 const protocols = {};
@@ -372,7 +374,7 @@ function processArgs (methodName, fromArgs, argsOption = {}, returnValue = {}, k
     if (isFn(argsOption)) {
       argsOption = argsOption(fromArgs, toArgs) || {};
     }
-    for (let key in fromArgs) {
+    for (const key in fromArgs) {
       if (hasOwn(argsOption, key)) {
         let keyOption = argsOption[key];
         if (isFn(keyOption)) {
@@ -386,7 +388,9 @@ function processArgs (methodName, fromArgs, argsOption = {}, returnValue = {}, k
           toArgs[keyOption.name ? keyOption.name : key] = keyOption.value;
         }
       } else if (CALLBACKS.indexOf(key) !== -1) {
-        toArgs[key] = processCallback(methodName, fromArgs[key], returnValue);
+        if (isFn(fromArgs[key])) {
+          toArgs[key] = processCallback(methodName, fromArgs[key], returnValue);
+        }
       } else {
         if (!keepFromArgs) {
           toArgs[key] = fromArgs[key];
@@ -427,7 +431,12 @@ function wrapper (methodName, method) {
       if (typeof arg2 !== 'undefined') {
         args.push(arg2);
       }
-      const returnValue = wx[options.name || methodName].apply(wx, args);
+      if (isFn(options.name)) {
+        methodName = options.name(arg1);
+      } else if (isStr(options.name)) {
+        methodName = options.name;
+      }
+      const returnValue = wx[methodName].apply(wx, args);
       if (isSyncApi(methodName)) { // 同步 api
         return processReturnValue(methodName, returnValue, options.returnValue, isContextApi(methodName))
       }
@@ -466,10 +475,6 @@ TODOS.forEach(function (name) {
 });
 
 const getEmitter = (function () {
-  if (typeof getUniEmitter === 'function') {
-    /* eslint-disable no-undef */
-    return getUniEmitter
-  }
   let Emitter;
   return function getUniEmitter () {
     if (!Emitter) {
@@ -534,7 +539,7 @@ function wrapper$1 (webview) {
     return
   }
   const maskColor = webview.__uniapp_mask;
-  let maskWebview = webview.__uniapp_mask_id === '0' ? {
+  const maskWebview = webview.__uniapp_mask_id === '0' ? {
     setStyle ({
       mask
     }) {
@@ -579,8 +584,6 @@ function getSubNVueById (id) {
   }
   return webview
 }
-
-
 
 var api = /*#__PURE__*/Object.freeze({
   __proto__: null,
@@ -633,9 +636,79 @@ Component = function (options = {}) {
   return MPComponent(options)
 };
 
+class EventChannel {
+  constructor (id, events) {
+    this.id = id;
+    this.listener = {};
+    this.emitCache = {};
+    if (events) {
+      Object.keys(events).forEach(name => {
+        this.on(name, events[name]);
+      });
+    }
+  }
+
+  emit (eventName, ...args) {
+    const fns = this.listener[eventName];
+    if (!fns) {
+      return (this.emitCache[eventName] || (this.emitCache[eventName] = [])).push(args)
+    }
+    fns.forEach(opt => {
+      opt.fn.apply(opt.fn, args);
+    });
+    this.listener[eventName] = fns.filter(opt => opt.type !== 'once');
+  }
+
+  on (eventName, fn) {
+    this._addListener(eventName, 'on', fn);
+    this._clearCache(eventName);
+  }
+
+  once (eventName, fn) {
+    this._addListener(eventName, 'once', fn);
+    this._clearCache(eventName);
+  }
+
+  off (eventName, fn) {
+    const fns = this.listener[eventName];
+    if (!fns) {
+      return
+    }
+    if (fn) {
+      for (let i = 0; i < fns.length;) {
+        if (fns[i].fn === fn) {
+          fns.splice(i, 1);
+          i--;
+        }
+        i++;
+      }
+    } else {
+      delete this.listener[eventName];
+    }
+  }
+
+  _clearCache (eventName) {
+    const cacheArgs = this.emitCache[eventName];
+    if (cacheArgs) {
+      for (; cacheArgs.length > 0;) {
+        this.emit.apply(this, [eventName].concat(cacheArgs.shift()));
+      }
+    }
+  }
+
+  _addListener (eventName, type, fn) {
+    (this.listener[eventName] || (this.listener[eventName] = [])).push({
+      fn,
+      type
+    });
+  }
+}
+
 const PAGE_EVENT_HOOKS = [
   'onPullDownRefresh',
   'onReachBottom',
+  'onAddToFavorites',
+  'onShareTimeline',
   'onShareAppMessage',
   'onPageScroll',
   'onResize',
@@ -698,10 +771,10 @@ function initVueComponent (Vue, vueOptions) {
   let VueComponent;
   if (isFn(vueOptions)) {
     VueComponent = vueOptions;
-    vueOptions = VueComponent.extendOptions;
   } else {
     VueComponent = Vue.extend(vueOptions);
   }
+  vueOptions = VueComponent.options;
   return [VueComponent, vueOptions]
 }
 
@@ -770,14 +843,14 @@ function createObserver (name) {
 }
 
 function initBehaviors (vueOptions, initBehavior) {
-  const vueBehaviors = vueOptions['behaviors'];
-  const vueExtends = vueOptions['extends'];
-  const vueMixins = vueOptions['mixins'];
+  const vueBehaviors = vueOptions.behaviors;
+  const vueExtends = vueOptions.extends;
+  const vueMixins = vueOptions.mixins;
 
-  let vueProps = vueOptions['props'];
+  let vueProps = vueOptions.props;
 
   if (!vueProps) {
-    vueOptions['props'] = vueProps = [];
+    vueOptions.props = vueProps = [];
   }
 
   const behaviors = [];
@@ -789,11 +862,11 @@ function initBehaviors (vueOptions, initBehavior) {
           vueProps.push('name');
           vueProps.push('value');
         } else {
-          vueProps['name'] = {
+          vueProps.name = {
             type: String,
             default: ''
           };
-          vueProps['value'] = {
+          vueProps.value = {
             type: [String, Number, Boolean, Array, Object, Date],
             default: ''
           };
@@ -837,6 +910,11 @@ function initProperties (props, isBehavior = false, file = '') {
       type: String,
       value: ''
     };
+    // 用于字节跳动小程序模拟抽象节点
+    properties.generic = {
+      type: Object,
+      value: null
+    };
     properties.vueSlots = { // 小程序不能直接定义 $slots 的 props，所以通过 vueSlots 转换到 $slots
       type: null,
       value: [],
@@ -862,7 +940,7 @@ function initProperties (props, isBehavior = false, file = '') {
     Object.keys(props).forEach(key => {
       const opts = props[key];
       if (isPlainObject(opts)) { // title:{type:String,default:''}
-        let value = opts['default'];
+        let value = opts.default;
         if (isFn(value)) {
           value = value();
         }
@@ -901,6 +979,11 @@ function wrapper$2 (event) {
     event.detail = {};
   }
 
+  if (hasOwn(event, 'markerId')) {
+    event.detail = typeof event.detail === 'object' ? event.detail : {};
+    event.detail.markerId = event.markerId;
+  }
+
   if (isPlainObject(event.detail)) {
     event.target = Object.assign({}, event.target, event.detail);
   }
@@ -917,7 +1000,18 @@ function getExtraValue (vm, dataPathsArray) {
       const propPath = dataPathArray[1];
       const valuePath = dataPathArray[3];
 
-      const vFor = dataPath ? vm.__get_value(dataPath, context) : context;
+      let vFor;
+      if (Number.isInteger(dataPath)) {
+        vFor = dataPath;
+      } else if (!dataPath) {
+        vFor = context;
+      } else if (typeof dataPath === 'string' && dataPath) {
+        if (dataPath.indexOf('#s#') === 0) {
+          vFor = dataPath.substr(3);
+        } else {
+          vFor = vm.__get_value(dataPath, context);
+        }
+      }
 
       if (Number.isInteger(vFor)) {
         context = value;
@@ -967,6 +1061,12 @@ function processEventExtra (vm, extra, event) {
         } else {
           if (dataPath === '$event') { // $event
             extraObj['$' + index] = event;
+          } else if (dataPath === 'arguments') {
+            if (event.detail && event.detail.__args__) {
+              extraObj['$' + index] = event.detail.__args__;
+            } else {
+              extraObj['$' + index] = [event];
+            }
           } else if (dataPath.indexOf('$event.') === 0) { // $event.target.value
             extraObj['$' + index] = vm.__get_value(dataPath.replace('$event.', ''), event);
           } else {
@@ -1047,17 +1147,26 @@ function isMatchEventType (eventType, optType) {
     )
 }
 
+function getContextVm (vm) {
+  let $parent = vm.$parent;
+  // 父组件是 scoped slots 或者其他自定义组件时继续查找
+  while ($parent && $parent.$parent && ($parent.$options.generic || $parent.$parent.$options.generic || $parent.$scope._$vuePid)) {
+    $parent = $parent.$parent;
+  }
+  return $parent && $parent.$parent
+}
+
 function handleEvent (event) {
   event = wrapper$2(event);
 
   // [['tap',[['handle',[1,2,a]],['handle1',[1,2,a]]]]]
   const dataset = (event.currentTarget || event.target).dataset;
   if (!dataset) {
-    return console.warn(`事件信息不存在`)
+    return console.warn('事件信息不存在')
   }
   const eventOpts = dataset.eventOpts || dataset['event-opts']; // 支付宝 web-view 组件 dataset 非驼峰
   if (!eventOpts) {
-    return console.warn(`事件信息不存在`)
+    return console.warn('事件信息不存在')
   }
 
   // [['handle',[1,2,a]],['handle1',[1,2,a]]]
@@ -1079,12 +1188,8 @@ function handleEvent (event) {
         const methodName = eventArray[0];
         if (methodName) {
           let handlerCtx = this.$vm;
-          if (
-            handlerCtx.$options.generic &&
-            handlerCtx.$parent &&
-            handlerCtx.$parent.$parent
-          ) { // mp-weixin,mp-toutiao 抽象节点模拟 scoped slots
-            handlerCtx = handlerCtx.$parent.$parent;
+          if (handlerCtx.$options.generic) { // mp-weixin,mp-toutiao 抽象节点模拟 scoped slots
+            handlerCtx = getContextVm(handlerCtx) || handlerCtx;
           }
           if (methodName === '$emit') {
             handlerCtx.$emit.apply(handlerCtx,
@@ -1108,14 +1213,17 @@ function handleEvent (event) {
             }
             handler.once = true;
           }
-          ret.push(handler.apply(handlerCtx, processEventArgs(
+          const params = processEventArgs(
             this.$vm,
             event,
             eventArray[1],
             eventArray[2],
             isCustom,
             methodName
-          )));
+          );
+          // 参数尾部增加原始事件对象用于复杂表达式内获取额外数据
+          // eslint-disable-next-line no-sparse-arrays
+          ret.push(handler.apply(handlerCtx, (Array.isArray(params) ? params : []).concat([, , , , , , , , , , event])));
         }
       });
     }
@@ -1134,7 +1242,9 @@ const hooks = [
   'onShow',
   'onHide',
   'onError',
-  'onPageNotFound'
+  'onPageNotFound',
+  'onThemeChange',
+  'onUnhandledRejection'
 ];
 
 function parseBaseApp (vm, {
@@ -1304,16 +1414,86 @@ function parseApp$1 (vm) {
   return appOptions
 }
 
+const eventChannels = {};
+
+const eventChannelStack = [];
+
+function getEventChannel (id) {
+  if (id) {
+    const eventChannel = eventChannels[id];
+    delete eventChannels[id];
+    return eventChannel
+  }
+  return eventChannelStack.shift()
+}
+
 function createApp (vm) {
+  Vue.prototype.getOpenerEventChannel = function () {
+    if (!this.__eventChannel__) {
+      this.__eventChannel__ = new EventChannel();
+    }
+    return this.__eventChannel__
+  };
+  const callHook = Vue.prototype.__call_hook;
+  Vue.prototype.__call_hook = function (hook, args) {
+    if (hook === 'onLoad' && args && args.__id__) {
+      this.__eventChannel__ = getEventChannel(args.__id__);
+      delete args.__id__;
+    }
+    return callHook.call(this, hook, args)
+  };
   App(parseApp$1(vm));
   return vm
+}
+
+const encodeReserveRE = /[!'()*]/g;
+const encodeReserveReplacer = c => '%' + c.charCodeAt(0).toString(16);
+const commaRE = /%2C/g;
+
+// fixed encodeURIComponent which is more conformant to RFC3986:
+// - escapes [!'()*]
+// - preserve commas
+const encode = str => encodeURIComponent(str)
+  .replace(encodeReserveRE, encodeReserveReplacer)
+  .replace(commaRE, ',');
+
+function stringifyQuery (obj, encodeStr = encode) {
+  const res = obj ? Object.keys(obj).map(key => {
+    const val = obj[key];
+
+    if (val === undefined) {
+      return ''
+    }
+
+    if (val === null) {
+      return encodeStr(key)
+    }
+
+    if (Array.isArray(val)) {
+      const result = [];
+      val.forEach(val2 => {
+        if (val2 === undefined) {
+          return
+        }
+        if (val2 === null) {
+          result.push(encodeStr(key));
+        } else {
+          result.push(encodeStr(key) + '=' + encodeStr(val2));
+        }
+      });
+      return result.join('&')
+    }
+
+    return encodeStr(key) + '=' + encodeStr(val)
+  }).filter(x => x.length > 0).join('&') : null;
+  return res ? `?${res}` : ''
 }
 
 function parseBaseComponent (vueComponentOptions, {
   isPage,
   initRelation
 } = {}) {
-  let [VueComponent, vueOptions] = initVueComponent(Vue, vueComponentOptions);
+  const [VueComponent, vueOptions] = initVueComponent(Vue, vueComponentOptions);
 
   const options = {
     multipleSlots: true,
@@ -1382,6 +1562,10 @@ function parseBaseComponent (vueComponentOptions, {
       __e: handleEvent
     }
   };
+  // externalClasses
+  if (vueOptions.externalClasses) {
+    componentOptions.externalClasses = vueOptions.externalClasses;
+  }
 
   if (Array.isArray(vueOptions.wxsCallMethods)) {
     vueOptions.wxsCallMethods.forEach(callMethod => {
@@ -1429,9 +1613,15 @@ function parseBasePage (vuePageOptions, {
 
   initHooks(pageOptions.methods, hooks$2, vuePageOptions);
 
-  pageOptions.methods.onLoad = function (args) {
-    this.$vm.$mp.query = args; // 兼容 mpvue
-    this.$vm.__call_hook('onLoad', args);
+  pageOptions.methods.onLoad = function (query) {
+    this.options = query;
+    const copyQuery = Object.assign({}, query);
+    delete copyQuery.__id__;
+    this.$page = {
+      fullPath: '/' + (this.route || this.is) + stringifyQuery(copyQuery)
+    };
+    this.$vm.$mp.query = query; // 兼容 mpvue
+    this.$vm.__call_hook('onLoad', query);
   };
 
   return pageOptions
@@ -1449,7 +1639,8 @@ const hooks$3 = [
   'onNavigationBarButtonTap',
   'onNavigationBarSearchInputChanged',
   'onNavigationBarSearchInputConfirmed',
-  'onNavigationBarSearchInputClicked'
+  'onNavigationBarSearchInputClicked',
+  'onNavigationBarSearchInputFocusChanged'
 ];
 
 function parsePage$1 (vuePageOptions) {
@@ -1489,7 +1680,7 @@ let uni = {};
 if (typeof Proxy !== 'undefined' && "app-plus" !== 'app-plus') {
   uni = new Proxy({}, {
     get (target, name) {
-      if (target[name]) {
+      if (hasOwn(target, name)) {
         return target[name]
       }
       if (baseApi[name]) {

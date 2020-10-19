@@ -6,7 +6,8 @@ import {
 
 import {
   MOUNTED_DATA,
-  UPDATED_DATA
+  UPDATED_DATA,
+  VD_SYNC_VERSION
 } from '../../../constants'
 
 import {
@@ -22,6 +23,10 @@ import {
   B_STYLE,
   S_CLASS
 } from '../../constants'
+
+import {
+  generateId
+} from '../../../helpers/util'
 
 import {
   diff
@@ -57,10 +62,7 @@ export function initData (Vue) {
     if (!this._$vd) {
       return
     }
-    // TODO 自定义组件中的 slot 数据采集是在组件内部，导致所在 context 中无法获取到差量数据
-    // 如何保证每个 vm 数据有变动，就加入 diff 中呢？
-    // 每次变化，可能触发多次 beforeUpdate，updated
-    // 子组件 updated 时，可能会增加父组件的 diffData，如 slot 等情况
+
     diff(this._$newData, this._$data, this._$vdUpdatedData)
     this._$data = JSON.parse(JSON.stringify(this._$newData))
     // setTimeout 一下再 nextTick（ 直接 nextTick 的话，会紧接着该 updated 做 flush，导致父组件 updated 数据被丢弃）
@@ -84,14 +86,10 @@ export function initData (Vue) {
         return
       }
       if (this.mpType === 'page') {
-        this._$vdomSync = new VDomSync(this.$options.pageId, this.$options.pagePath, this)
+        this._$vdomSync = new VDomSync(this.$options.pageId, this.$options.pagePath, this.$options.pageQuery, this)
       }
       if (this._$vd) {
-        if (!this.$parent) {
-          this._$id = '-1'
-        } else {
-          this._$id = this.$parent._$id + ',' + this.$vnode.data.attrs._i
-        }
+        this._$id = generateId(this, this.$parent, VD_SYNC_VERSION)
         this._$vd.addVm(this)
         this._$vdMountedData = Object.create(null)
         this._$setData(MOUNTED_DATA, this._$vdMountedData)
@@ -139,6 +137,10 @@ function parseExternalClasses (clazz, vm) {
   return clazz
 }
 
+function isNotSafeString (value) {
+  return value === 'null' || value === 'true' || value === 'false' || !isNaN(Number(value)) || (value.startsWith('[') && value.endsWith(']')) || (value.startsWith('{') && value.endsWith('}'))
+}
+
 function setData (id, name, value) {
   switch (name) {
     case B_CLASS:
@@ -159,7 +161,7 @@ function setData (id, name, value) {
       return setForData.call(this, id, value)
   }
   // TODO 暂时先传递 dataset 至 view 层(理论上不需要)
-  if (name.indexOf('a-data-') === 0) {
+  if (name.indexOf('a-data-') === 0 && (typeof value !== 'string' || isNotSafeString(value))) {
     try {
       value = JSON.stringify(value)
     } catch (e) {}

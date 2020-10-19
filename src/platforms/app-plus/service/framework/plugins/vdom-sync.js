@@ -4,6 +4,10 @@ import {
 } from 'uni-shared'
 
 import {
+  wrapperMPEvent
+} from 'uni-helpers/patch'
+
+import {
   VD_SYNC,
   UI_EVENT,
   PAGE_CREATE,
@@ -55,10 +59,7 @@ function wrapperEvent (event) {
   parseTargets(event)
   event.preventDefault = noop
   event.stopPropagation = noop
-  event.mp = event
-  return Object.assign({
-    mp: event // mpvue
-  }, event)
+  return wrapperMPEvent(event)
 }
 
 const handleVdData = {
@@ -67,7 +68,10 @@ const handleVdData = {
       nid = String(nid)
       const target = vd.elements.find(target => target.cid === cid && target.nid === nid)
       if (!target) {
-        return console.error(`event handler[${cid}][${nid}] not found`)
+        if (process.env.NODE_ENV !== 'production') {
+          console.error(`event handler[${cid}][${nid}] not found`)
+        }
+        return
       }
       const type = event.type
       const mpEvent = wrapperEvent(event)
@@ -89,9 +93,10 @@ function onVdSync (vdBatchData, vd) {
 }
 
 export class VDomSync {
-  constructor (pageId, pagePath, pageVm) {
+  constructor (pageId, pagePath, pageQuery, pageVm) {
     this.pageId = pageId
     this.pagePath = pagePath
+    this.pageQuery = pageQuery
     this.pageVm = pageVm
     this.batchData = []
     this.vms = Object.create(null)
@@ -153,16 +158,12 @@ export class VDomSync {
   removeElement (elm) {
     const elmIndex = this.elements.indexOf(elm)
     if (elmIndex === -1) {
-      return console.error(`removeElement[${elm.cid}][${elm.nid}] not found`)
-    }
-    this.elements.splice(elmIndex, 1)
-  }
-
-  removeElementByCid (cid) {
-    if (!cid) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.error(`removeElement[${elm.cid}][${elm.nid}] not found`)
+      }
       return
     }
-    this.elements = this.elements.filter(elm => elm.cid !== cid)
+    this.elements.splice(elmIndex, 1)
   }
 
   push (type, cid, data, options) {
@@ -192,7 +193,7 @@ export class VDomSync {
   flush () {
     if (!this.initialized) {
       this.initialized = true
-      this.batchData.push([PAGE_CREATED, [this.pageId, this.pagePath]])
+      this.batchData.push([PAGE_CREATED, [this.pageId, this.pagePath, this.pageQuery]])
     }
     const batchData = this.batchData.filter(data => {
       if (data[0] === UPDATED_DATA && !Object.keys(data[1][1]).length) {
@@ -227,7 +228,7 @@ export class VDomSync {
   }
 
   restorePageCreated () {
-    this.batchData.push([PAGE_CREATED, [this.pageId, this.pagePath]])
+    this.batchData.push([PAGE_CREATED, [this.pageId, this.pagePath, this.pageQuery]])
   }
 
   restore () {

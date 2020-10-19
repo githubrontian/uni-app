@@ -73,7 +73,7 @@ function initVm (VueComponent) {
 }
 
 export default function parseComponent (vueComponentOptions) {
-  let [VueComponent, vueOptions] = initVueComponent(Vue, vueComponentOptions)
+  const [VueComponent, vueOptions] = initVueComponent(Vue, vueComponentOptions)
 
   const properties = initProperties(vueOptions.props, false, vueOptions.__file)
 
@@ -126,6 +126,14 @@ export default function parseComponent (vueComponentOptions) {
     componentOptions.deriveDataFromProps = createObserver()
   } else {
     componentOptions.didUpdate = createObserver(true)
+  }
+
+  if (Array.isArray(vueOptions.wxsCallMethods)) {
+    vueOptions.wxsCallMethods.forEach(callMethod => {
+      componentOptions.methods[callMethod] = function (args) {
+        return this.$vm[callMethod](args)
+      }
+    })
   }
 
   return componentOptions

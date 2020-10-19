@@ -43,7 +43,7 @@ uni.showToast({
 
 **Tips**
 
-App端可通过[plus.nativeUI.toast API](https://www.html5plus.org/doc/zh_cn/nativeui.html#plus.nativeUI.toast)实现更多功能。
+- App端可通过[plus.nativeUI.toast API](https://www.html5plus.org/doc/zh_cn/nativeui.html#plus.nativeUI.toast)实现更多功能。
 
 ### uni.hideToast()
 
@@ -153,8 +153,8 @@ uni.showModal({
 |参数|类型|必填|说明|平台差异说明|
 |:-|:-|:-|:-|:-|
 |itemList|Array&lt;String&gt;|是|按钮的文字数组|微信、百度、字节跳动小程序数组长度最大为6个|
-|itemColor|HexColor|否|按钮的文字颜色，字符串格式，默认为"#000000"|字节跳动小程序不支持|
-|popover|Object|否|iPad 上弹出原生选择按钮框的指示区域，默认指向屏幕底部水平居中位置|仅 App 2.6.6+ 支持|
+|itemColor|HexColor|否|按钮的文字颜色，字符串格式，默认为"#000000"|App-iOS、字节跳动小程序不支持|
+|popover|Object|否|大屏设备弹出原生选择按钮框的指示区域，默认居中显示|App-iPad（2.6.6+）、H5（2.9.2）|
 |success|Function|否|接口调用成功的回调函数，详见返回参数说明||
 |fail|Function|否|接口调用失败的回调函数||
 |complete|Function|否|接口调用结束的回调函数（调用成功、失败都会执行）|&nbsp;|
@@ -163,7 +163,7 @@ uni.showModal({
 
 |值|类型|说明|
 |:-|:-|:-|
-|top|Number|指示区域坐标|
+|top|Number|指示区域坐标，使用原生 navigationBar 时一般需要加上 navigationBar 的高度|
 |left|Number|指示区域坐标|
 |width|Number|指示区域宽度|
 |height|Number|指示区域高度|

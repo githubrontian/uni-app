@@ -8,8 +8,9 @@ import {
   Spring
 } from 'uni-mixins/scroller/Spring'
 import {
+  initScrollBounce,
   disableScrollBounce
-} from 'uni-shared'
+} from 'uni-platform/helpers/scroll'
 
 function initClick (dom) {
   const MAX_MOVE = 20
@@ -23,7 +24,7 @@ function initClick (dom) {
   dom.addEventListener('touchend', (event) => {
     const info = event.changedTouches[0]
     if (Math.abs(info.clientX - x) < MAX_MOVE && Math.abs(info.clientY - y) < MAX_MOVE) {
-      let customEvent = new CustomEvent('click', {
+      const customEvent = new CustomEvent('click', {
         bubbles: true,
         cancelable: true,
         target: event.target,
@@ -93,6 +94,7 @@ export default {
       this.update()
     })
     initClick(this.$el)
+    initScrollBounce()
   },
   methods: {
     _setItemHeight (height) {
@@ -282,15 +284,6 @@ export default {
     /* top: 102px; */
     top: 50%;
     transform: translateY(-50%);
-  }
-
-  .uni-picker-view-indicator,
-  .uni-picker-view-mask {
-    position: absolute;
-    left: 0;
-    width: 100%;
-    z-index: 3;
-    pointer-events: none;
   }
 
   .uni-picker-view-content {

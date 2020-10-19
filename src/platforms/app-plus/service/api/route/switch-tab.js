@@ -1,10 +1,15 @@
 import {
+  parseQuery
+} from 'uni-shared'
+
+import {
   ANI_CLOSE,
   ANI_DURATION
 } from '../../constants'
 
 import {
-  showWebview
+  showWebview,
+  closeWebview
 } from './util'
 
 import {
@@ -25,6 +30,7 @@ import tabBar from '../../framework/tab-bar'
 function _switchTab ({
   url,
   path,
+  query,
   from
 }, callbackId) {
   tabBar.switchTab(path.slice(1))
@@ -47,16 +53,16 @@ function _switchTab ({
       pages.reverse().forEach(page => {
         if (!page.$page.meta.isTabBar && page !== currentPage) {
           page.$remove()
-          page.$getAppWebview().close('none')
+          closeWebview(page.$getAppWebview(), 'none')
         }
       })
       currentPage.$remove()
       // 延迟执行避免iOS应用退出
       setTimeout(() => {
         if (currentPage.$page.openType === 'redirect') {
-          currentPage.$getAppWebview().close(ANI_CLOSE, ANI_DURATION)
+          closeWebview(currentPage.$getAppWebview(), ANI_CLOSE, ANI_DURATION)
         } else {
-          currentPage.$getAppWebview().close('auto')
+          closeWebview(currentPage.$getAppWebview(), 'auto')
         }
       }, 100)
     } else {
@@ -87,14 +93,17 @@ function _switchTab ({
     currentPage.$vm.__call_hook('onHide')
   }
   if (tabBarPage) {
-    tabBarPage.$getAppWebview().show('none')
+    const webview = tabBarPage.$getAppWebview()
+    webview.show('none')
     // 等visible状态都切换完之后，再触发onShow，否则开发者在onShow里边 getCurrentPages 会不准确
-    callOnShow && tabBarPage.$vm.__call_hook('onShow')
+    if (callOnShow && !webview.__preload__) {
+      tabBarPage.$vm.__call_hook('onShow')
+    }
   } else {
     return showWebview(registerPage({
       url,
       path,
-      query: {},
+      query,
       openType: 'switchTab'
     }), 'none', 0, () => {
       setStatusBarStyle()
@@ -115,11 +124,15 @@ export function switchTab ({
   from,
   openType
 }, callbackId) {
-  const path = url.split('?')[0]
+  // 直达时，允许 tabBar 带参数
+  const urls = url.split('?')
+  const path = urls[0]
+  const query = parseQuery(urls[1] || '')
   navigate(path, function () {
     _switchTab({
       url,
       path,
+      query,
       from
     }, callbackId)
   }, openType === 'appLaunch')

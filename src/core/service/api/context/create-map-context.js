@@ -18,21 +18,19 @@ UniServiceJSBridge.subscribe('onMapMethodCallback', ({
   callback.invoke(callbackId, data)
 })
 
-const methods = ['getCenterLocation', 'getScale', 'getRegion', 'includePoints', 'translateMarker']
+const methods = ['getCenterLocation', 'moveToLocation', 'getScale', 'getRegion', 'includePoints', 'translateMarker']
 
 export class MapContext {
   constructor (id, pageVm) {
     this.id = id
     this.pageVm = pageVm
   }
-
-  moveToLocation () {
-    operateMapPlayer(this.id, this.pageVm, 'moveToLocation')
-  }
 }
 
 MapContext.prototype.$getAppMap = function () {
-  return plus.maps.getMapById(this.pageVm.$page.id + '-map-' + this.id)
+  if (__PLATFORM__ === 'app-plus') {
+    return plus.maps.getMapById(this.pageVm.$page.id + '-map-' + this.id)
+  }
 }
 
 methods.forEach(function (method) {

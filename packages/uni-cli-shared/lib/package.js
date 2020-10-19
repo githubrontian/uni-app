@@ -15,8 +15,8 @@ module.exports = {
 
     let scriptOptions = false
 
-    if (uniAppOptions && uniAppOptions['scripts']) {
-      scriptOptions = uniAppOptions['scripts'][name]
+    if (uniAppOptions && uniAppOptions.scripts) {
+      scriptOptions = uniAppOptions.scripts[name]
     }
 
     if (!scriptOptions) {
@@ -36,6 +36,7 @@ module.exports = {
 
     process.env.UNI_PLATFORM = scriptOptions.env.UNI_PLATFORM
 
+    process.env.UNI_SCRIPT = name
     process.UNI_SCRIPT_ENV = scriptOptions.env || {}
     process.UNI_SCRIPT_DEFINE = scriptOptions.define || {}
 

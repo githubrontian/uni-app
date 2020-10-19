@@ -2,14 +2,14 @@
 #### ad
 应用内展示的广告组件，可用于banner或信息流。
 
-- app端的广告源由腾讯广点通、头条穿山甲、360广告联盟提供，DCloud负责聚合
+- app端的广告源由腾讯广点通、头条穿山甲、快手广告联盟、360广告联盟以及部分DCloud直投广告聚合提供，在DCloud的uni-AD后台注册：[https://uniad.dcloud.net.cn/](https://uniad.dcloud.net.cn/)
 - 小程序端的广告由小程序平台提供
 
 **平台差异说明**
 
-|App|H5|微信小程序|支付宝小程序|百度小程序|字节跳动小程序|QQ小程序|
-|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-|√（2.5.2+）|x|√|x|√|√|√|
+|App|H5|微信小程序|支付宝小程序|百度小程序|字节跳动小程序|QQ小程序|快应用|360小程序|
+|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+|√（2.5.2+）|x|√|x|√|√|√|x|x|
 
 
 **开通配置广告**
@@ -22,7 +22,7 @@
 2. 申请广告位id
 在各位后台申请广告位id
 3. 在页面合适位置编写代码，放置ad组件，配上广告位id（app是adpid，微信、头条、qq小程序是unit-id，百度小程序是apid）
-4. App端打包后生效，打包时必须选择要集成的广告SDK（穿山甲、广点通、360联盟）。
+4. App端打包后生效，打包时必须选择要集成的广告SDK（穿山甲、广点通、360联盟、快手）。
 
 **属性说明**
 
@@ -70,14 +70,20 @@ App和微信小程序的ad组件没有type属性，可以用于banner，也可�
 - 微信小程序 `<ad>` 组件不支持触发 tap 等触摸相关事件
 - Android 平台 nvue的 `<list>` 组件中使用 `<ad>` 时，必须指定宽度属性`<ad width="750rpx" />`，因为 `<list>` 有自动的内存回收机制，不在屏幕范围的组件不被创建，组件内部无法获取大小
 - 广点通概率出现重复广告，可根据需求请求广告数据，推荐单次大于1条(plus.ad.getAds) 来降低重复率
-- vue 页面使用 `<ad>` 暂不支持非 V3 编译，manifest.json 可配置
+- app-vue 页面使用 `<ad>` 不支持非 V3 编译，必须使用v3编译器。
 - `<recycle-list>` 暂不支持 `<ad>`
-- app-vue|QQ是客户端原生组件，层级最高无法被覆盖，app-nvue|微信|头条没有层级覆盖问题
+- app-vue|QQ是客户端[原生组件](https://uniapp.dcloud.io/component/native-component)，层级最高无法被覆盖，app-nvue|微信|头条没有层级覆盖问题
+- app-vue 无法在 `<swiper>` 组件中使用`<ad>`
+- app-vue 不能在 `<scroll-view>` 组件中使用 `<ad>`，仅适用于页面级的滚动
+- HBuilderX2.8+版本Android平台更新穿山甲（今日头条）广告SDK后不再支持x86类型CPU，无法运行到x86类型cpu的模拟器。
+- `<ad>` 组件测试广告位是上图下文，uniAD后台申请的广告位默认左图右文
+- HBuilderX标准基座真机运行测试信息流广告位标识（adpid）为：1111111111
 
 **@error 错误码**
-- App端聚合的穿山甲：[错误码](https://ad.oceanengine.com/union/media/doc?id=5de4cc6d78c8690012a90aa5)
-- App端聚合的广点通：[错误码](https://developers.adnet.qq.com/doc/ios/union/union_debug#%E9%94%99%E8%AF%AF%E7%A0%81)
-
+- App端聚合的穿山甲(iOS)：[错误码](https://ad.oceanengine.com/union/media/union/download/detail?id=16&docId=5de8d574b1afac00129330d5&osType=ios)
+- App端聚合的穿山甲(Android)：[错误码](https://ad.oceanengine.com/union/media/union/download/detail?id=4&docId=5de8d9b925b16b00113af0ed&osType=android)
+- App端聚合的广点通(iOS)：[错误码](https://developers.adnet.qq.com/doc/ios/union/union_debug#%E9%94%99%E8%AF%AF%E7%A0%81)
+- App端聚合的广点通(Android)：[错误码](https://developers.adnet.qq.com/doc/android/union/union_debug#sdk%20%E9%94%99%E8%AF%AF%E7%A0%81)
 
 **@downloadchange status**
 
@@ -100,6 +106,7 @@ App和微信小程序的ad组件没有type属性，可以用于banner，也可�
   <view class="content">
 
     <!-- App平台 示例 1 -->
+    <!-- adpid="1111111111" 此广告位标识仅在HBuilderX标准基座中有效，仅用于测试，替换为自己申请获取的广告位标识 -->
     <view class="ad-view">
       <ad adpid="1111111111" @load="onload" @close="onclose" @error="onerror" @downloadchange="ondownloadchange"></ad>
     </view>
@@ -159,7 +166,7 @@ export default {
     getAdData: function (e) {
       // 仅APP平台支持
       plus.ad.getAds({
-          adpid: '',  // dcloud 后台创建
+          adpid: '1111111111',  // 替换为自己申请获取的广告位标识，此广告位标识仅在HBuilderX标准基座中有效，仅用于测试
           count: 1,   // 广告数量，默认 3
           width: 300  // 根据宽度获取合适的广告(单位px)
         },
@@ -203,10 +210,10 @@ export default {
 ```
 
 **激励视频广告**
-文档地址：[https://uniapp.dcloud.io/api/ad/rewarded-video-ad](https://uniapp.dcloud.io/api/ad/rewarded-video-ad)
+文档地址：[https://uniapp.dcloud.io/api/a-d/rewarded-video](https://uniapp.dcloud.io/api/a-d/rewarded-video)
 
 **注意**
 - App端广告开通指南和收益相关问题：[https://ask.dcloud.net.cn/article/36769](https://ask.dcloud.net.cn/article/36769)
-- App端除了ad组件，还支持开屏。详见[uni-AD官网](https://uniad.dcloud.net.cn/)
+- App端除了ad组件，还支持开屏、激励视频等多种广告形式。详见[uni-AD官网](https://uniad.dcloud.net.cn/)
 - App端uni-AD聚合了腾讯广点通、头条穿山甲、360广告联盟等服务，打包时必须勾选相应的sdk，详见：[https://ask.dcloud.net.cn/article/36718](https://ask.dcloud.net.cn/article/36718)
 ![](https://img-cdn-qiniu.dcloud.net.cn/uploads/article/20200115/10b714ce030ce2032a9d9b0bdd0ae03a.jpg)

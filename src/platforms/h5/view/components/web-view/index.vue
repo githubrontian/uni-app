@@ -2,7 +2,8 @@
   <uni-web-view v-on="$listeners">
     <v-uni-resize-sensor
       ref="sensor"
-      @resize="_resize" />
+      @resize="_resize"
+    />
   </uni-web-view>
 </template>
 <script>
@@ -21,6 +22,9 @@ export default {
   },
   mounted () {
     this.iframe = document.createElement('iframe')
+    Object.keys(this.$attrs).forEach(key => {
+      this.iframe[key] = this.$attrs[key]
+    })
     this.iframe.src = this.$getRealPath(this.src)
     document.body.appendChild(this.iframe)
     this._resize()

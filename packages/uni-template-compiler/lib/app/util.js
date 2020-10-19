@@ -13,6 +13,8 @@ const SET_MP_CLASS = '_$smc'
 const GET_CHANGE_DATA = '_$gc' // wxs
 
 const C_IS = 'is'
+const C_SLOT_TARGET = 'st'
+const C_REF = 'ref'
 
 const V_FOR = 'f'
 const V_IF = 'i'
@@ -62,6 +64,9 @@ function updateEleId (el, it, state) {
   })
   el.ifConditions && el.ifConditions.forEach((con, index) => {
     index !== 0 && updateEleId(con.block, it, state)
+  })
+  el.scopedSlots && Object.values(el.scopedSlots).forEach((slot, index) => {
+    updateEleId(slot, it, state)
   })
 }
 
@@ -117,6 +122,9 @@ function getNewId (id, it) {
 function updateScopedSlotEleId (el, state) {
   // TODO 暂不考虑 scopedSlot 嵌套情况
   if (el.slotScope) {
+    const getNewId = function (id, it) {
+      return Number.isInteger(id) ? `("${id}-"+${it})` : `(${id}+"-"+${it})`
+    }
     const updateEleId = function (el) {
       if (el.type !== 1) {
         return
@@ -207,6 +215,9 @@ function traverseNode (el, parent, state, isScopedSlot) {
   el.scopedSlots && Object.values(el.scopedSlots).forEach((slot, index) => {
     state.childIndex = index
     slot.slotScope = `${slot.slotScope}, _svm, _si`
+    if (slot.slotTargetDynamic && slot.slotTarget) {
+      slot.slotTarget = state.createGenVar(slot.attrsMap[ID])(C_SLOT_TARGET, slot.slotTarget)
+    }
     traverseNode(slot, el, state, true)
   })
 }
@@ -253,6 +264,7 @@ function addHandler (el, name, value, important) {
 
 module.exports = {
   C_IS,
+  C_REF,
   V_FOR,
   V_IF,
   V_ELSE_IF,

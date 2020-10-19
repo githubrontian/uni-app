@@ -5,8 +5,14 @@ import {
 import initOn from 'uni-core/service/bridge/on'
 
 import {
-  NETWORK_TYPES
+  NETWORK_TYPES,
+  TEMP_PATH,
+  TEMP_PATH_BASE
 } from '../api/constants'
+
+import {
+  initEntryPage
+} from './config'
 
 import {
   getCurrentPages
@@ -35,10 +41,6 @@ import {
   backbuttonListener
 } from './backbutton'
 
-import {
-  consumeNativeEvent
-} from '../api/plugin/on-native-event-receive'
-
 let appCtx
 
 const defaultApp = {
@@ -63,10 +65,17 @@ function initGlobalListeners () {
   const globalEvent = requireNativePlugin('globalEvent')
   const emit = UniServiceJSBridge.emit
 
-  // splashclosed 时开始监听 backbutton
-  plus.globalEvent.addEventListener('splashclosed', () => {
+  if (weex.config.preload) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[uni-app] preload.addEventListener.backbutton')
+    }
     plus.key.addEventListener('backbutton', backbuttonListener)
-  })
+  } else {
+    // splashclosed 时开始监听 backbutton
+    plus.globalEvent.addEventListener('splashclosed', () => {
+      plus.key.addEventListener('backbutton', backbuttonListener)
+    })
+  }
 
   plus.globalEvent.addEventListener('pause', () => {
     emit('onAppEnterBackground')
@@ -91,16 +100,21 @@ function initGlobalListeners () {
   })
 
   globalEvent.addEventListener('uistylechange', function (event) {
+    const args = {
+      theme: event.uistyle
+    }
+
+    callAppHook(appCtx, 'onThemeChange', args)
+    publish('onThemeChange', args)
+
+    // 兼容旧版本 API
     publish('onUIStyleChange', {
       style: event.uistyle
     })
   })
 
-  globalEvent.addEventListener('uniMPNativeEvent', function ({
-    event,
-    data
-  }) {
-    consumeNativeEvent(event, data)
+  globalEvent.addEventListener('uniMPNativeEvent', function (event) {
+    publish('uniMPNativeEvent', event)
   })
 
   plus.globalEvent.addEventListener('plusMessage', onPlusMessage)
@@ -131,7 +145,7 @@ function initAppLaunch (appVm) {
 }
 
 function initTabBar () {
-  if (!__uniConfig.tabBar || !__uniConfig.tabBar.list.length) {
+  if (!__uniConfig.tabBar || !__uniConfig.tabBar.list || !__uniConfig.tabBar.list.length) {
     return
   }
 
@@ -161,53 +175,36 @@ function initTabBar () {
   }
 }
 
-function initEntryPage () {
-  let entryPagePath
-  let entryPageQuery
-
-  const weexPlus = weex.requireModule('plus')
-
-  if (weexPlus.getRedirectInfo) {
-    const info = weexPlus.getRedirectInfo() || {}
-    entryPagePath = info.path
-    entryPageQuery = info.query ? ('?' + info.query) : ''
-  } else {
-    const argsJsonStr = plus.runtime.arguments
-    if (!argsJsonStr) {
-      return
-    }
-    try {
-      const args = JSON.parse(argsJsonStr)
-      entryPagePath = args.path || args.pathName
-      entryPageQuery = args.query ? ('?' + args.query) : ''
-    } catch (e) {}
+export function clearTempFile () {
+  // 统一处理路径
+  function getPath (path) {
+    path = path.replace(/\/$/, '')
+    return path.indexOf('_') === 0 ? plus.io.convertLocalFileSystemURL(path) : path
   }
-
-  if (!entryPagePath || entryPagePath === __uniConfig.entryPagePath) {
-    return
-  }
-
-  const entryRoute = '/' + entryPagePath
-  const routeOptions = __uniRoutes.find(route => route.path === entryRoute)
-  if (!routeOptions) {
-    return
-  }
-
-  if (!routeOptions.meta.isTabBar) {
-    __uniConfig.realEntryPagePath = __uniConfig.realEntryPagePath || __uniConfig.entryPagePath
-  }
-
-  __uniConfig.entryPagePath = entryPagePath
-  __uniConfig.entryPageQuery = entryPageQuery
-
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`[uni-app] entryPagePath(${entryPagePath + entryPageQuery})`)
-  }
+  var basePath = getPath(TEMP_PATH_BASE)
+  var tempPath = getPath(TEMP_PATH)
+  // 获取父目录
+  var dirPath = tempPath.split('/')
+  dirPath.pop()
+  dirPath = dirPath.join('/')
+  plus.io.resolveLocalFileSystemURL(plus.io.convertAbsoluteFileSystem(dirPath), entry => {
+    var reader = entry.createReader()
+    reader.readEntries(function (entries) {
+      if (entries && entries.length) {
+        entries.forEach(function (entry) {
+          if (entry.isDirectory && entry.fullPath.indexOf(basePath) === 0 && entry.fullPath
+            .indexOf(tempPath) !== 0) {
+            entry.removeRecursively()
+          }
+        })
+      }
+    })
+  })
 }
 
 export function registerApp (appVm) {
   if (process.env.NODE_ENV !== 'production') {
-    console.log(`[uni-app] registerApp`)
+    console.log('[uni-app] registerApp')
   }
 
   appCtx = appVm
@@ -233,6 +230,9 @@ export function registerApp (appVm) {
   initSubscribeHandlers()
 
   initAppLaunch(appVm)
+
+  // 10s后清理临时文件
+  setTimeout(clearTempFile, 10000)
 
   __uniConfig.ready = true
 

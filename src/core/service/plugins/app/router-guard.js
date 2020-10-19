@@ -78,7 +78,7 @@ function beforeEach (to, from, next, routes) {
   const fromId = from.params.__id__
   const toId = to.params.__id__
   const toName = to.meta.name + '-' + toId
-  if (toId === fromId) { // 相同页面阻止
+  if (toId === fromId && to.type !== 'reLaunch') { // 相同页面阻止
     // 处理外部修改 history 导致卡在当前页面的问题
     if (to.fullPath !== from.fullPath) {
       removeKeepAliveInclude.call(this, toName)
@@ -105,12 +105,13 @@ function beforeEach (to, from, next, routes) {
             to.meta.isQuit = true
             to.meta.isEntry = !!from.meta.isEntry
           }
-          if (from.meta.isTabBar) { // 如果是 tabBar，需要更新系统组件 tabBar 内的 list 数据
-            to.meta.isTabBar = true
-            to.meta.tabBarIndex = from.meta.tabBarIndex
-            const appVm = getApp().$children[0]
-            appVm.$set(appVm.tabBar.list[to.meta.tabBarIndex], 'pagePath', to.meta.pagePath)
-          }
+          // 小程序没有这个逻辑，当时为何加了保留并更新 tabBar 的逻辑？
+          // if (from.meta.isTabBar) { // 如果是 tabBar，需要更新系统组件 tabBar 内的 list 数据
+          //   to.meta.isTabBar = true
+          //   to.meta.tabBarIndex = from.meta.tabBarIndex
+          //   const appVm = getApp().$children[0]
+          //   appVm.$set(appVm.tabBar.list[to.meta.tabBarIndex], 'pagePath', to.meta.pagePath)
+          // }
         }
 
         break
@@ -132,7 +133,7 @@ function beforeEach (to, from, next, routes) {
         break
     }
 
-    if (to.type !== 'reLaunch' && from.meta.id) { // 如果不是 reLaunch，且 meta 指定了 id
+    if (to.type !== 'reLaunch' && to.type !== 'redirectTo' && from.meta.id) { // 如果不是 reLaunch、redirectTo，且 meta 指定了 id
       addKeepAliveInclude.call(this, fromName)
     }
     // if (to.type !== 'reLaunch') { // TODO 如果 reLaunch，1.keepAlive的话，无法触发页面生命周期，并刷新页面，2.不 keepAlive 的话，页面状态无法再次保留,且 routeView 的 cache 有问题
@@ -203,18 +204,7 @@ function afterEach (to, from) {
       // 延迟执行 onShow，防止与 UniServiceJSBridge.emit('onHidePopup') 冲突。
       setTimeout(function () {
         if (__PLATFORM__ === 'h5') {
-          const navigationBar = toVm.$parent.$parent.navigationBar
-          if (typeof qh !== 'undefined') {
-            qh.setNavigationBarTitle({
-              title: document.title
-            })
-            qh.setNavigationBarColor({
-              backgroundColor: navigationBar.backgroundColor
-            })
-            qh.setNavigationBarTextStyle({
-              textStyle: navigationBar.textColor === '#000' ? 'black' : 'white'
-            })
-          }
+          UniServiceJSBridge.emit('onNavigationBarChange', toVm.$parent.$parent.navigationBar)
         }
         callPageHook(toVm, 'onShow')
       }, 0)

@@ -3,14 +3,18 @@
     <system-header
       :confirm="!!data"
       @back="_back"
-      @confirm="_choose">选择位置</system-header>
+      @confirm="_choose"
+    >
+      选择位置
+    </system-header>
     <div class="map-content">
       <iframe
         :src="src"
         allow="geolocation"
         seamless
         sandbox="allow-scripts allow-same-origin allow-forms"
-        frameborder="0" />
+        frameborder="0"
+      />
     </div>
   </div>
 </template>
@@ -23,15 +27,14 @@ export default {
     SystemHeader
   },
   data () {
+    const key = __uniConfig.qqMapKey
     return {
-      src: '',
+      src: `https://apis.map.qq.com/tools/locpicker?search=1&type=1&key=${key}&referer=uniapp`,
       data: null
     }
   },
   mounted () {
-    var key = __uniConfig.qqMapKey
-    this.src = `https://apis.map.qq.com/tools/locpicker?search=1&type=1&key=${key}&referer=uniapp`
-    window.addEventListener('message', (event) => {
+    function handler (event) {
       var loc = event.data
       if (loc && loc.module === 'locationPicker') {
         this.data = {
@@ -41,12 +44,17 @@ export default {
           longitude: loc.latlng.lng
         }
       }
-    }, false)
+    }
+    this.__messageHandle = handler.bind(this)
+    window.addEventListener('message', this.__messageHandle, false)
+  },
+  beforeDestroy () {
+    window.removeEventListener('message', this.__messageHandle, false)
   },
   methods: {
     _choose () {
       if (this.data) {
-        UniViewJSBridge.publishHandler('onChooseLocation', this.data)
+        UniViewJSBridge.publishHandler('onChooseLocation', Object.assign({}, this.data))
         getApp().$router.back()
       }
     },

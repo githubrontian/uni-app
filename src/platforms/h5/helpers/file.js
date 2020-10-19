@@ -1,3 +1,7 @@
+import {
+  hasOwn
+} from 'uni-shared'
+
 /**
  * 暂存的文件对象
  */
@@ -40,8 +44,35 @@ export function base64ToFile (base64) {
   while (n--) {
     array[n] = str.charCodeAt(n)
   }
-  var filename = `${Date.now()}.${type.split('/')[1]}`
-  return new File([array], filename, { type: type })
+  return blobToFile(array, type)
+}
+/**
+ * 简易获取扩展名
+ * @param {string} type
+ * @return {string}
+ */
+function getExtname (type) {
+  const extname = type.split('/')[1]
+  return extname ? `.${extname}` : ''
+}
+/**
+ * blob转File
+ * @param {Blob} blob
+ * @param {string} type
+ * @return {File}
+ */
+export function blobToFile (blob, type) {
+  if (!(blob instanceof File)) {
+    type = type || blob.type || ''
+    const filename = `${Date.now()}${getExtname(type)}`
+    try {
+      blob = new File([blob], filename, { type })
+    } catch (error) {
+      blob = blob instanceof Blob ? blob : new Blob([blob], { type })
+      blob.name = blob.name || filename
+    }
+  }
+  return blob
 }
 /**
  * 从本地file或者blob对象创建url
@@ -50,7 +81,7 @@ export function base64ToFile (base64) {
  */
 export function fileToUrl (file) {
   for (const key in files) {
-    if (files.hasOwnProperty(key)) {
+    if (hasOwn(files, key)) {
       const oldFile = files[key]
       if (oldFile === file) {
         return key
@@ -60,4 +91,9 @@ export function fileToUrl (file) {
   var url = (window.URL || window.webkitURL).createObjectURL(file)
   files[url] = file
   return url
+}
+
+export function revokeObjectURL (url) {
+  (window.URL || window.webkitURL).revokeObjectURL(url)
+  delete files[url]
 }

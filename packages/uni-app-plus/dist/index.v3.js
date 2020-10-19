@@ -26,7 +26,8 @@ var serviceContext = (function () {
     'sendSocketMessage',
     'onSocketMessage',
     'closeSocket',
-    'onSocketClose'
+    'onSocketClose',
+    'getUpdateManager'
   ];
 
   const route = [
@@ -65,6 +66,7 @@ var serviceContext = (function () {
     'compressImage',
     'getRecorderManager',
     'getBackgroundAudioManager',
+    'createAudioContext',
     'createInnerAudioContext',
     'chooseVideo',
     'saveVideoToPhotosAlbum',
@@ -119,6 +121,8 @@ var serviceContext = (function () {
     'getBLEDeviceCharacteristics',
     'createBLEConnection',
     'closeBLEConnection',
+    'setBLEMTU',
+    'getBLEDeviceRSSI',
     'onBeaconServiceChange',
     'onBeaconUpdate',
     'getBeacons',
@@ -127,12 +131,14 @@ var serviceContext = (function () {
     'checkIsSupportSoterAuthentication',
     'checkIsSoterEnrolledInDevice',
     'startSoterAuthentication',
+    'onThemeChange',
     'onUIStyleChange'
   ];
 
   const keyboard = [
     'hideKeyboard',
-    'onKeyboardHeightChange'
+    'onKeyboardHeightChange',
+    'getSelectedTextRange'
   ];
 
   const ui = [
@@ -165,7 +171,15 @@ var serviceContext = (function () {
     'startPullDownRefresh',
     'stopPullDownRefresh',
     'createSelectorQuery',
-    'createIntersectionObserver'
+    'createIntersectionObserver',
+    'createMediaQueryObserver',
+    'getMenuButtonBoundingClientRect',
+    'showTopWindow',
+    'showLeftWindow',
+    'showRightWindow',
+    'hideTopWindow',
+    'hideLeftWindow',
+    'hideRightWindow',
   ];
 
   const event = [
@@ -214,7 +228,10 @@ var serviceContext = (function () {
     'getCurrentSubNVue',
     'setPageMeta',
     'onNativeEventReceive',
-    'sendNativeEvent'
+    'sendNativeEvent',
+    'preloadPage',
+    'unPreloadPage',
+    'loadSubPackage'
   ];
 
   const ad = [
@@ -303,10 +320,53 @@ var serviceContext = (function () {
 
   function debounce (fn, delay) {
     let timeout;
-    return function () {
+    const newFn = function () {
       clearTimeout(timeout);
       const timerFn = () => fn.apply(this, arguments);
       timeout = setTimeout(timerFn, delay);
+    };
+    newFn.cancel = function () {
+      clearTimeout(timeout);
+    };
+    return newFn
+  }
+
+  /**
+   * Check if two values are loosely equal - that is,
+   * if they are plain objects, do they have the same shape?
+   */
+  function looseEqual (a, b) {
+    if (a === b) return true
+    const isObjectA = isObject(a);
+    const isObjectB = isObject(b);
+    if (isObjectA && isObjectB) {
+      try {
+        const isArrayA = Array.isArray(a);
+        const isArrayB = Array.isArray(b);
+        if (isArrayA && isArrayB) {
+          return a.length === b.length && a.every((e, i) => {
+            return looseEqual(e, b[i])
+          })
+        } else if (a instanceof Date && b instanceof Date) {
+          return a.getTime() === b.getTime()
+        } else if (!isArrayA && !isArrayB) {
+          const keysA = Object.keys(a);
+          const keysB = Object.keys(b);
+          return keysA.length === keysB.length && keysA.every(key => {
+            return looseEqual(a[key], b[key])
+          })
+        } else {
+          /* istanbul ignore next */
+          return false
+        }
+      } catch (e) {
+        /* istanbul ignore next */
+        return false
+      }
+    } else if (!isObjectA && !isObjectB) {
+      return String(a) === String(b)
+    } else {
+      return false
     }
   }
 
@@ -381,6 +441,18 @@ var serviceContext = (function () {
       return encodeStr(key) + '=' + encodeStr(val)
     }).filter(x => x.length > 0).join('&') : null;
     return res ? `?${res}` : ''
+  }
+
+  function decodedQuery (query = {}) {
+    const decodedQuery = {};
+    Object.keys(query).forEach(name => {
+      try {
+        decodedQuery[name] = decode(query[name]);
+      } catch (e) {
+        decodedQuery[name] = query[name];
+      }
+    });
+    return decodedQuery
   }
 
   let id = 0;
@@ -544,7 +616,7 @@ var serviceContext = (function () {
     for (let i = 0; i < hooks.length; i++) {
       const hook = hooks[i];
       if (promise) {
-        promise = Promise.then(wrapperHook(hook));
+        promise = Promise.resolve(wrapperHook(hook));
       } else {
         const res = hook(data);
         if (isPromise(res)) {
@@ -645,14 +717,18 @@ var serviceContext = (function () {
 
   const CONTEXT_API_RE = /^create|Manager$/;
 
+  // Context例外情况
+  const CONTEXT_API_RE_EXC = ['createBLEConnection'];
+
   const TASK_APIS = ['request', 'downloadFile', 'uploadFile', 'connectSocket'];
 
+  // 同步例外情况
   const ASYNC_API = ['createBLEConnection'];
 
-  const CALLBACK_API_RE = /^on/;
+  const CALLBACK_API_RE = /^on|^off/;
 
   function isContextApi (name) {
-    return CONTEXT_API_RE.test(name)
+    return CONTEXT_API_RE.test(name) && CONTEXT_API_RE_EXC.indexOf(name) === -1
   }
   function isSyncApi (name) {
     return SYNC_API_RE.test(name) && ASYNC_API.indexOf(name) === -1
@@ -901,7 +977,7 @@ var serviceContext = (function () {
     },
     canvasId: {
       type: String,
-      require: true
+      required: true
     },
     fileType: {
       type: String,
@@ -922,11 +998,11 @@ var serviceContext = (function () {
   const drawCanvas = {
     canvasId: {
       type: String,
-      require: true
+      required: true
     },
     actions: {
       type: Array,
-      require: true
+      required: true
     },
     reserve: {
       type: Boolean,
@@ -969,12 +1045,12 @@ var serviceContext = (function () {
   });
 
   const makePhoneCall = {
-    'phoneNumber': {
+    phoneNumber: {
       type: String,
       required: true,
       validator (phoneNumber) {
         if (!phoneNumber) {
-          return `makePhoneCall:fail parameter error: parameter.phoneNumber should not be empty String;`
+          return 'makePhoneCall:fail parameter error: parameter.phoneNumber should not be empty String;'
         }
       }
     }
@@ -983,6 +1059,23 @@ var serviceContext = (function () {
   var require_context_module_0_7 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     makePhoneCall: makePhoneCall
+  });
+
+  const scanCode = {
+    onlyFromCamera: {
+      type: Boolean
+    },
+    scanType: {
+      type: Array
+    },
+    autoDecodeCharSet: {
+      type: Boolean
+    }
+  };
+
+  var require_context_module_0_8 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    scanCode: scanCode
   });
 
   const setClipboardData = {
@@ -995,179 +1088,9 @@ var serviceContext = (function () {
     }
   };
 
-  var require_context_module_0_8 = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    setClipboardData: setClipboardData
-  });
-
-  const openDocument = {
-    filePath: {
-      type: String,
-      required: true
-    },
-    fileType: {
-      type: String
-    }
-  };
-
   var require_context_module_0_9 = /*#__PURE__*/Object.freeze({
     __proto__: null,
-    openDocument: openDocument
-  });
-
-  const chooseLocation = {
-    keyword: {
-      type: String
-    }
-  };
-
-  var require_context_module_0_10 = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    chooseLocation: chooseLocation
-  });
-
-  const type = {
-    WGS84: 'WGS84',
-    GCJ02: 'GCJ02'
-  };
-  const getLocation = {
-    type: {
-      type: String,
-      validator (value, params) {
-        value = (value || '').toUpperCase();
-        params.type = Object.values(type).indexOf(value) < 0 ? type.WGS84 : value;
-      },
-      default: type.WGS84
-    },
-    altitude: {
-      altitude: Boolean,
-      default: false
-    }
-  };
-
-  var require_context_module_0_11 = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    getLocation: getLocation
-  });
-
-  const openLocation = {
-    latitude: {
-      type: Number,
-      required: true
-    },
-    longitude: {
-      type: Number,
-      required: true
-    },
-    scale: {
-      type: Number,
-      validator (value, params) {
-        value = Math.floor(value);
-        params.scale = value >= 5 && value <= 18 ? value : 18;
-      },
-      default: 18
-    },
-    name: {
-      type: String
-    },
-    address: {
-      type: String
-    }
-  };
-
-  var require_context_module_0_12 = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    openLocation: openLocation
-  });
-
-  const SIZE_TYPES = ['original', 'compressed'];
-  const SOURCE_TYPES = ['album', 'camera'];
-
-  const chooseImage = {
-    'count': {
-      type: Number,
-      required: false,
-      default: 9,
-      validator (count, params) {
-        if (count <= 0) {
-          params.count = 9;
-        }
-      }
-    },
-    'sizeType': {
-      type: [Array, String],
-      required: false,
-      default: SIZE_TYPES,
-      validator (sizeType, params) {
-        // 非必传的参数，不符合预期时处理为默认值。
-        const length = sizeType.length;
-        if (!length) {
-          params.sizeType = SIZE_TYPES;
-        } else if (typeof sizeType === 'string') {
-          if (!~SIZE_TYPES.indexOf(sizeType)) {
-            params.sizeType = SIZE_TYPES;
-          }
-        } else {
-          for (let i = 0; i < length; i++) {
-            if (typeof sizeType[i] !== 'string' || !~SIZE_TYPES.indexOf(sizeType[i])) {
-              params.sizeType = SIZE_TYPES;
-              break
-            }
-          }
-        }
-      }
-    },
-    'sourceType': {
-      type: Array,
-      required: false,
-      default: SOURCE_TYPES,
-      validator (sourceType, params) {
-        const length = sourceType.length;
-        if (!length) {
-          params.sourceType = SOURCE_TYPES;
-        } else {
-          for (let i = 0; i < length; i++) {
-            if (typeof sourceType[i] !== 'string' || !~SOURCE_TYPES.indexOf(sourceType[i])) {
-              params.sourceType = SOURCE_TYPES;
-              break
-            }
-          }
-        }
-      }
-    }
-  };
-
-  var require_context_module_0_13 = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    chooseImage: chooseImage
-  });
-
-  const SOURCE_TYPES$1 = ['album', 'camera'];
-
-  const chooseVideo = {
-    'sourceType': {
-      type: Array,
-      required: false,
-      default: SOURCE_TYPES$1,
-      validator (sourceType, params) {
-        const length = sourceType.length;
-        if (!length) {
-          params.sourceType = SOURCE_TYPES$1;
-        } else {
-          for (let i = 0; i < length; i++) {
-            if (typeof sourceType[i] !== 'string' || !~SOURCE_TYPES$1.indexOf(sourceType[i])) {
-              params.sourceType = SOURCE_TYPES$1;
-              break
-            }
-          }
-        }
-      }
-    }
-  };
-
-  var require_context_module_0_14 = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    chooseVideo: chooseVideo
+    setClipboardData: setClipboardData
   });
 
   function getRealRoute (fromRoute, toRoute) {
@@ -1248,8 +1171,212 @@ var serviceContext = (function () {
     return filePath
   }
 
+  const saveFile = {
+    tempFilePath: {
+      type: String,
+      required: true,
+      validator (value, params) {
+        params.tempFilePath = getRealPath(value);
+      }
+    }
+  };
+
+  const TYPES = ['md5', 'sha1'];
+
+  const getFileInfo = {
+    filePath: {
+      type: String,
+      required: true,
+      validator (value, params) {
+        params.filePath = getRealPath(value);
+      }
+    },
+    digestAlgorithm: {
+      type: String,
+      validator (value, params) {
+        params.digestAlgorithm = TYPES.includes(value) ? value : TYPES[0];
+      },
+      default: TYPES[0]
+    }
+  };
+
+  const getSavedFileInfo = {
+    filePath: {
+      type: String,
+      required: true,
+      validator (value, params) {
+        params.filePath = getRealPath(value);
+      }
+    }
+  };
+
+  const removeSavedFile = {
+    filePath: {
+      type: String,
+      required: true,
+      validator (value, params) {
+        params.filePath = getRealPath(value);
+      }
+    }
+  };
+
+  var require_context_module_0_10 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    saveFile: saveFile,
+    getFileInfo: getFileInfo,
+    getSavedFileInfo: getSavedFileInfo,
+    removeSavedFile: removeSavedFile
+  });
+
+  const openDocument = {
+    filePath: {
+      type: String,
+      required: true
+    },
+    fileType: {
+      type: String
+    }
+  };
+
+  var require_context_module_0_11 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    openDocument: openDocument
+  });
+
+  const chooseLocation = {
+    keyword: {
+      type: String
+    }
+  };
+
+  var require_context_module_0_12 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    chooseLocation: chooseLocation
+  });
+
+  const type = {
+    WGS84: 'WGS84',
+    GCJ02: 'GCJ02'
+  };
+  const getLocation = {
+    type: {
+      type: String,
+      validator (value, params) {
+        value = (value || '').toUpperCase();
+        params.type = Object.values(type).indexOf(value) < 0 ? type.WGS84 : value;
+      },
+      default: type.WGS84
+    },
+    altitude: {
+      type: Boolean,
+      default: false
+    }
+  };
+
+  var require_context_module_0_13 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    getLocation: getLocation
+  });
+
+  const openLocation = {
+    latitude: {
+      type: Number,
+      required: true
+    },
+    longitude: {
+      type: Number,
+      required: true
+    },
+    scale: {
+      type: Number,
+      validator (value, params) {
+        value = Math.floor(value);
+        params.scale = value >= 5 && value <= 18 ? value : 18;
+      },
+      default: 18
+    },
+    name: {
+      type: String
+    },
+    address: {
+      type: String
+    }
+  };
+
+  var require_context_module_0_14 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    openLocation: openLocation
+  });
+
+  const SIZE_TYPES = ['original', 'compressed'];
+  const SOURCE_TYPES = ['album', 'camera'];
+
+  const chooseImage = {
+    count: {
+      type: Number,
+      required: false,
+      default: 9,
+      validator (count, params) {
+        if (count <= 0) {
+          params.count = 9;
+        }
+      }
+    },
+    sizeType: {
+      type: [Array, String],
+      required: false,
+      default: SIZE_TYPES,
+      validator (sizeType, params) {
+        sizeType = typeof sizeType === 'string' ? [sizeType] : sizeType;
+        sizeType = sizeType.filter(sizeType => SIZE_TYPES.includes(sizeType));
+        params.sizeType = sizeType.length ? sizeType : SIZE_TYPES;
+      }
+    },
+    sourceType: {
+      type: Array,
+      required: false,
+      default: SOURCE_TYPES,
+      validator (sourceType, params) {
+        sourceType = sourceType.filter(sourceType => SOURCE_TYPES.includes(sourceType));
+        params.sourceType = sourceType.length ? sourceType : SOURCE_TYPES;
+      }
+    }
+  };
+
+  var require_context_module_0_15 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    chooseImage: chooseImage
+  });
+
+  const SOURCE_TYPES$1 = ['album', 'camera'];
+
+  const chooseVideo = {
+    sourceType: {
+      type: Array,
+      required: false,
+      default: SOURCE_TYPES$1,
+      validator (sourceType, params) {
+        sourceType = sourceType.filter(sourceType => SOURCE_TYPES$1.includes(sourceType));
+        params.sourceType = sourceType.length ? sourceType : SOURCE_TYPES$1;
+      }
+    },
+    maxDuration: {
+      type: Number,
+      default: 60
+    },
+    camera: {
+      type: String,
+      default: 'back'
+    }
+  };
+
+  var require_context_module_0_16 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    chooseVideo: chooseVideo
+  });
+
   const getImageInfo = {
-    'src': {
+    src: {
       type: String,
       required: true,
       validator (src, params) {
@@ -1258,7 +1385,7 @@ var serviceContext = (function () {
     }
   };
 
-  var require_context_module_0_15 = /*#__PURE__*/Object.freeze({
+  var require_context_module_0_17 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     getImageInfo: getImageInfo
   });
@@ -1294,9 +1421,24 @@ var serviceContext = (function () {
     }
   };
 
-  var require_context_module_0_16 = /*#__PURE__*/Object.freeze({
+  var require_context_module_0_18 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     previewImage: previewImage
+  });
+
+  const saveImageToPhotosAlbum = {
+    filePath: {
+      type: String,
+      required: true,
+      validator (filePath, params) {
+        params.filePath = getRealPath(filePath);
+      }
+    }
+  };
+
+  var require_context_module_0_19 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    saveImageToPhotosAlbum: saveImageToPhotosAlbum
   });
 
   const downloadFile = {
@@ -1312,7 +1454,7 @@ var serviceContext = (function () {
     }
   };
 
-  var require_context_module_0_17 = /*#__PURE__*/Object.freeze({
+  var require_context_module_0_20 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     downloadFile: downloadFile
   });
@@ -1349,7 +1491,7 @@ var serviceContext = (function () {
       item = item.split('=');
       query[item[0]] = item[1];
     });
-    for (let key in data) {
+    for (const key in data) {
       if (hasOwn(data, key)) {
         let v = data[key];
         if (typeof v === 'undefined' || v === null) {
@@ -1373,7 +1515,7 @@ var serviceContext = (function () {
       }
     },
     data: {
-      type: [Object, String, ArrayBuffer],
+      type: [Object, String, Array, ArrayBuffer],
       validator (value, params) {
         params.data = value || '';
       }
@@ -1414,10 +1556,13 @@ var serviceContext = (function () {
         value = (value || '').toLowerCase();
         params.responseType = Object.values(responseType).indexOf(value) < 0 ? responseType.TEXT : value;
       }
+    },
+    withCredentials: {
+      type: Boolean
     }
   };
 
-  var require_context_module_0_18 = /*#__PURE__*/Object.freeze({
+  var require_context_module_0_21 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     request: request
   });
@@ -1475,7 +1620,7 @@ var serviceContext = (function () {
     }
   };
 
-  var require_context_module_0_19 = /*#__PURE__*/Object.freeze({
+  var require_context_module_0_22 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     connectSocket: connectSocket,
     sendSocketMessage: sendSocketMessage,
@@ -1517,7 +1662,7 @@ var serviceContext = (function () {
     }
   };
 
-  var require_context_module_0_20 = /*#__PURE__*/Object.freeze({
+  var require_context_module_0_23 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     uploadFile: uploadFile
   });
@@ -1542,9 +1687,30 @@ var serviceContext = (function () {
     }
   };
 
-  var require_context_module_0_21 = /*#__PURE__*/Object.freeze({
+  var require_context_module_0_24 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     getProvider: getProvider
+  });
+
+  const loadSubPackage = {
+    root: {
+      type: String,
+      required: true,
+      validator (value, params) {
+        const subPackages = __uniConfig.subPackages;
+        if (!Array.isArray(subPackages) || subPackages.length === 0) {
+          return 'no subPackages'
+        }
+        if (!subPackages.find(subPackage => subPackage.root === value)) {
+          return 'root `' + value + '` is not found'
+        }
+      }
+    }
+  };
+
+  var require_context_module_0_25 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    loadSubPackage: loadSubPackage
   });
 
   function encodeQueryString (url) {
@@ -1607,8 +1773,12 @@ var serviceContext = (function () {
         }
       }
 
-      // tabBar不允许传递参数
-      if (routeOptions.meta.isTabBar) {
+      // switchTab不允许传递参数,reLaunch到一个tabBar页面是可以的
+      if (
+        (type === 'switchTab' || type === 'preloadPage') &&
+        routeOptions.meta.isTabBar &&
+        params.openType !== 'appLaunch'
+      ) {
         url = pagePath;
       }
 
@@ -1619,8 +1789,37 @@ var serviceContext = (function () {
 
       // 参数格式化
       params.url = encodeQueryString(url);
+      if (type === 'unPreloadPage') {
+        return
+      } else if (type === 'preloadPage') {
+        {
+          if (!routeOptions.meta.isNVue) {
+            return 'can not preload vue page'
+          }
+        }
+        if (routeOptions.meta.isTabBar) {
+          const pages = getCurrentPages(true);
+          const tabBarPagePath = (routeOptions.alias || routeOptions.path).substr(1);
+          if (pages.find(page => page.route === tabBarPagePath)) {
+            return 'tabBar page `' + tabBarPagePath + '` already exists'
+          }
+        }
+        return
+      }
+
+      // 主要拦截目标为用户快速点击时触发的多次跳转，该情况，通常前后 url 是一样的
+      if (navigatorLock === url && params.openType !== 'appLaunch') {
+        return `${navigatorLock} locked`
+      }
+      // 至少 onLaunch 之后，再启用lock逻辑（onLaunch之前可能开发者手动调用路由API，来提前跳转）
+      // enableNavigatorLock 临时开关（不对外开放），避免该功能上线后，有部分情况异常，可以让开发者临时关闭 lock 功能
+      if (__uniConfig.ready && __uniConfig.enableNavigatorLock !== false) {
+        navigatorLock = url;
+      }
     }
   }
+
+  let navigatorLock;
 
   function createProtocol (type, extras = {}) {
     return Object.assign({
@@ -1628,6 +1827,9 @@ var serviceContext = (function () {
         type: String,
         required: true,
         validator: createValidator(type)
+      },
+      beforeAll () {
+        navigatorLock = '';
       }
     }, extras)
   }
@@ -1691,17 +1893,35 @@ var serviceContext = (function () {
     ]
   ));
 
-  var require_context_module_0_22 = /*#__PURE__*/Object.freeze({
+  const preloadPage = {
+    url: {
+      type: String,
+      required: true,
+      validator: createValidator('preloadPage')
+    }
+  };
+
+  const unPreloadPage = {
+    url: {
+      type: String,
+      required: true,
+      validator: createValidator('unPreloadPage')
+    }
+  };
+
+  var require_context_module_0_26 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     redirectTo: redirectTo,
     reLaunch: reLaunch,
     navigateTo: navigateTo,
     switchTab: switchTab,
-    navigateBack: navigateBack
+    navigateBack: navigateBack,
+    preloadPage: preloadPage,
+    unPreloadPage: unPreloadPage
   });
 
   const getStorage = {
-    'key': {
+    key: {
       type: String,
       required: true
     }
@@ -1714,11 +1934,11 @@ var serviceContext = (function () {
   }];
 
   const setStorage = {
-    'key': {
+    key: {
       type: String,
       required: true
     },
-    'data': {
+    data: {
       required: true
     }
   };
@@ -1735,7 +1955,7 @@ var serviceContext = (function () {
   const removeStorage = getStorage;
   const removeStorageSync = getStorageSync;
 
-  var require_context_module_0_23 = /*#__PURE__*/Object.freeze({
+  var require_context_module_0_27 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     getStorage: getStorage,
     getStorageSync: getStorageSync,
@@ -1772,14 +1992,14 @@ var serviceContext = (function () {
     }
   };
 
-  var require_context_module_0_24 = /*#__PURE__*/Object.freeze({
+  var require_context_module_0_28 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     loadFontFace: loadFontFace
   });
 
   const FRONT_COLORS = ['#ffffff', '#000000'];
   const setNavigationBarColor = {
-    'frontColor': {
+    frontColor: {
       type: String,
       required: true,
       validator (frontColor, params) {
@@ -1788,11 +2008,11 @@ var serviceContext = (function () {
         }
       }
     },
-    'backgroundColor': {
+    backgroundColor: {
       type: String,
       required: true
     },
-    'animation': {
+    animation: {
       type: Object,
       default () {
         return {
@@ -1809,13 +2029,13 @@ var serviceContext = (function () {
     }
   };
   const setNavigationBarTitle = {
-    'title': {
+    title: {
       type: String,
       required: true
     }
   };
 
-  var require_context_module_0_25 = /*#__PURE__*/Object.freeze({
+  var require_context_module_0_29 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     setNavigationBarColor: setNavigationBarColor,
     setNavigationBarTitle: setNavigationBarTitle
@@ -1835,7 +2055,7 @@ var serviceContext = (function () {
     }
   };
 
-  var require_context_module_0_26 = /*#__PURE__*/Object.freeze({
+  var require_context_module_0_30 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     pageScrollTo: pageScrollTo
   });
@@ -1956,7 +2176,7 @@ var serviceContext = (function () {
     }
   };
 
-  var require_context_module_0_27 = /*#__PURE__*/Object.freeze({
+  var require_context_module_0_31 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     showModal: showModal,
     showToast: showToast,
@@ -1979,6 +2199,9 @@ var serviceContext = (function () {
     },
     selectedIconPath: {
       type: String
+    },
+    pagePath: {
+      type: String
     }
   };
 
@@ -1990,6 +2213,17 @@ var serviceContext = (function () {
       type: String
     },
     backgroundColor: {
+      type: String
+    },
+    backgroundImage: {
+      type: String,
+      validator (backgroundImage, params) {
+        if (backgroundImage && !(/^(linear|radial)-gradient\(.+?\);?$/.test(backgroundImage))) {
+          params.backgroundImage = getRealPath(backgroundImage);
+        }
+      }
+    },
+    backgroundRepeat: {
       type: String
     },
     borderStyle: {
@@ -2041,7 +2275,7 @@ var serviceContext = (function () {
     }
   };
 
-  var require_context_module_0_28 = /*#__PURE__*/Object.freeze({
+  var require_context_module_0_32 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     setTabBarItem: setTabBarItem,
     setTabBarStyle: setTabBarStyle,
@@ -2065,27 +2299,31 @@ var serviceContext = (function () {
   './context/canvas.js': require_context_module_0_5,
   './context/context.js': require_context_module_0_6,
   './device/make-phone-call.js': require_context_module_0_7,
-  './device/set-clipboard-data.js': require_context_module_0_8,
-  './file/open-document.js': require_context_module_0_9,
-  './location/choose-location.js': require_context_module_0_10,
-  './location/get-location.js': require_context_module_0_11,
-  './location/open-location.js': require_context_module_0_12,
-  './media/choose-image.js': require_context_module_0_13,
-  './media/choose-video.js': require_context_module_0_14,
-  './media/get-image-info.js': require_context_module_0_15,
-  './media/preview-image.js': require_context_module_0_16,
-  './network/download-file.js': require_context_module_0_17,
-  './network/request.js': require_context_module_0_18,
-  './network/socket.js': require_context_module_0_19,
-  './network/upload-file.js': require_context_module_0_20,
-  './plugin/get-provider.js': require_context_module_0_21,
-  './route/route.js': require_context_module_0_22,
-  './storage/storage.js': require_context_module_0_23,
-  './ui/load-font-face.js': require_context_module_0_24,
-  './ui/navigation-bar.js': require_context_module_0_25,
-  './ui/page-scroll-to.js': require_context_module_0_26,
-  './ui/popup.js': require_context_module_0_27,
-  './ui/tab-bar.js': require_context_module_0_28,
+  './device/scan-code.js': require_context_module_0_8,
+  './device/set-clipboard-data.js': require_context_module_0_9,
+  './file/file.js': require_context_module_0_10,
+  './file/open-document.js': require_context_module_0_11,
+  './location/choose-location.js': require_context_module_0_12,
+  './location/get-location.js': require_context_module_0_13,
+  './location/open-location.js': require_context_module_0_14,
+  './media/choose-image.js': require_context_module_0_15,
+  './media/choose-video.js': require_context_module_0_16,
+  './media/get-image-info.js': require_context_module_0_17,
+  './media/preview-image.js': require_context_module_0_18,
+  './media/save-image-to-photos-album.js': require_context_module_0_19,
+  './network/download-file.js': require_context_module_0_20,
+  './network/request.js': require_context_module_0_21,
+  './network/socket.js': require_context_module_0_22,
+  './network/upload-file.js': require_context_module_0_23,
+  './plugin/get-provider.js': require_context_module_0_24,
+  './plugin/load-sub-package.js': require_context_module_0_25,
+  './route/route.js': require_context_module_0_26,
+  './storage/storage.js': require_context_module_0_27,
+  './ui/load-font-face.js': require_context_module_0_28,
+  './ui/navigation-bar.js': require_context_module_0_29,
+  './ui/page-scroll-to.js': require_context_module_0_30,
+  './ui/popup.js': require_context_module_0_31,
+  './ui/tab-bar.js': require_context_module_0_32,
 
       };
       var req = function req(key) {
@@ -2114,7 +2352,7 @@ var serviceContext = (function () {
     }
     if (value === undefined) {
       if (hasOwn(paramOptions, 'default')) {
-        const paramDefault = paramOptions['default'];
+        const paramDefault = paramOptions.default;
         value = isFn(paramDefault) ? paramDefault() : paramDefault;
         paramsData[key] = value; // 默认值
       }
@@ -2176,6 +2414,8 @@ var serviceContext = (function () {
       if (!valid && t === 'object') {
         valid = value instanceof type;
       }
+    } else if (value.byteLength >= 0) {
+      valid = true;
     } else if (expectedType === 'Object') {
       valid = isPlainObject(value);
     } else if (expectedType === 'Array') {
@@ -2252,7 +2492,9 @@ var serviceContext = (function () {
 
   function invokeCallbackHandlerFail (err, apiName, callbackId) {
     const errMsg = `${apiName}:fail ${err}`;
-    console.error(errMsg);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error(errMsg);
+    }
     if (callbackId === -1) {
       throw new Error(errMsg)
     }
@@ -2269,6 +2511,23 @@ var serviceContext = (function () {
     type: Function,
     required: true
   }];
+
+  // 目前已用到的仅这三个
+  // 完整的可能包含：
+  // beforeValidate,
+  // beforeSuccess,
+  // afterSuccess,
+  // beforeFail,
+  // afterFail,
+  // beforeCancel,
+  // afterCancel,
+  // beforeAll,
+  // afterAll
+  const IGNORE_KEYS = [
+    'beforeValidate',
+    'beforeAll',
+    'beforeSuccess'
+  ];
 
   function validateParams (apiName, paramsData, callbackId) {
     let paramTypes = protocol[apiName];
@@ -2299,7 +2558,7 @@ var serviceContext = (function () {
 
       const keys = Object.keys(paramTypes);
       for (let i = 0; i < keys.length; i++) {
-        if (keys[i] === 'beforeValidate') {
+        if (IGNORE_KEYS.indexOf(keys[i]) !== -1) {
           continue
         }
         const err = validateParam(keys[i], paramTypes, paramsData);
@@ -2319,8 +2578,8 @@ var serviceContext = (function () {
     const callbackId = invokeCallbackId++;
     const invokeCallbackName = 'api.' + apiName + '.' + callbackId;
 
-    const invokeCallback = function (res) {
-      callback(res);
+    const invokeCallback = function (res, extras) {
+      callback(res, extras);
     };
 
     invokeCallbacks[callbackId] = {
@@ -2340,7 +2599,7 @@ var serviceContext = (function () {
     params = Object.assign({}, params);
 
     const apiCallbacks = {};
-    for (let name in params) {
+    for (const name in params) {
       const param = params[name];
       if (isFn(param)) {
         apiCallbacks[name] = tryCatch(param);
@@ -2367,7 +2626,7 @@ var serviceContext = (function () {
     }
 
     const wrapperCallbacks = {};
-    for (let name in extras) {
+    for (const name in extras) {
       const extra = extras[name];
       if (isFn(extra)) {
         wrapperCallbacks[name] = tryCatchFramework(extra);
@@ -2381,6 +2640,7 @@ var serviceContext = (function () {
       afterFail,
       beforeCancel,
       afterCancel,
+      beforeAll,
       afterAll
     } = wrapperCallbacks;
 
@@ -2397,12 +2657,14 @@ var serviceContext = (function () {
         res.errMsg = apiName + ':cancel';
       } else if (res.errMsg.indexOf(':fail') !== -1) {
         let errDetail = '';
-        let spaceIndex = res.errMsg.indexOf(' ');
+        const spaceIndex = res.errMsg.indexOf(' ');
         if (spaceIndex > -1) {
           errDetail = res.errMsg.substr(spaceIndex);
         }
         res.errMsg = apiName + ':fail' + errDetail;
       }
+
+      isFn(beforeAll) && beforeAll(res);
 
       const errMsg = res.errMsg;
 
@@ -2464,15 +2726,15 @@ var serviceContext = (function () {
       callbackId
     }
   }
-
-  function invokeCallbackHandler (invokeCallbackId, res) {
+  // onNativeEventReceive((event,data)=>{}) 需要两个参数，写死最多两个参数，避免改动太大，影响已有逻辑
+  function invokeCallbackHandler (invokeCallbackId, res, extras) {
     if (typeof invokeCallbackId === 'number') {
       const invokeCallback = invokeCallbacks[invokeCallbackId];
       if (invokeCallback) {
         if (!invokeCallback.keepAlive) {
           delete invokeCallbacks[invokeCallbackId];
         }
-        return invokeCallback.callback(res)
+        return invokeCallback.callback(res, extras)
       }
     }
     return res
@@ -2487,6 +2749,7 @@ var serviceContext = (function () {
   function wrapperExtras (name, extras) {
     const protocolOptions = protocol[name];
     if (protocolOptions) {
+      isFn(protocolOptions.beforeAll) && (extras.beforeAll = protocolOptions.beforeAll);
       isFn(protocolOptions.beforeSuccess) && (extras.beforeSuccess = protocolOptions.beforeSuccess);
     }
   }
@@ -2667,6 +2930,11 @@ var serviceContext = (function () {
     isIOS = platform === 'ios';
   }
 
+  function checkValue (value, defaultValue) {
+    value = Number(value);
+    return isNaN(value) ? defaultValue : value
+  }
+
   function upx2px$1 (number, newDeviceWidth) {
     if (deviceWidth === 0) {
       checkDeviceWidth();
@@ -2676,16 +2944,22 @@ var serviceContext = (function () {
     if (number === 0) {
       return 0
     }
-    let result = (number / BASE_DEVICE_WIDTH) * (newDeviceWidth || deviceWidth);
+    const config = __uniConfig.globalStyle || __uniConfig.window || {};
+    const maxWidth = checkValue(config.rpxCalcMaxDeviceWidth, 960);
+    const baseWidth = checkValue(config.rpxCalcBaseDeviceWidth, 375);
+    const includeWidth = checkValue(config.rpxCalcIncludeWidth, 750);
+    let width = newDeviceWidth || deviceWidth;
+    width = number === includeWidth || width <= maxWidth ? width : baseWidth;
+    let result = (number / BASE_DEVICE_WIDTH) * width;
     if (result < 0) {
       result = -result;
     }
     result = Math.floor(result + EPS);
     if (result === 0) {
       if (deviceDPR === 1 || !isIOS) {
-        return 1
+        result = 1;
       } else {
-        return 0.5
+        result = 0.5;
       }
     }
     return number < 0 ? -result : result
@@ -2694,6 +2968,58 @@ var serviceContext = (function () {
   var require_context_module_1_3 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     upx2px: upx2px$1
+  });
+
+  function operateAudioPlayer (audioId, pageId, type, data) {
+    UniServiceJSBridge.publishHandler(pageId + '-audio-' + audioId, {
+      audioId,
+      type,
+      data
+    }, pageId);
+  }
+
+  class AudioContext {
+    constructor (id, pageId) {
+      this.id = id;
+      this.pageId = pageId;
+    }
+
+    setSrc (src) {
+      operateAudioPlayer(this.id, this.pageId, 'setSrc', {
+        src
+      });
+    }
+
+    play () {
+      operateAudioPlayer(this.id, this.pageId, 'play');
+    }
+
+    pause () {
+      operateAudioPlayer(this.id, this.pageId, 'pause');
+    }
+
+    seek (position) {
+      operateAudioPlayer(this.id, this.pageId, 'seek', {
+        position
+      });
+    }
+  }
+
+  function createAudioContext$1 (id, context) {
+    if (context) {
+      return new AudioContext(id, context.$page.id)
+    }
+    const app = getApp();
+    if (app.$route && app.$route.params.__id__) {
+      return new AudioContext(id, app.$route.params.__id__)
+    } else {
+      UniServiceJSBridge.emit('onError', 'createAudioContext:fail');
+    }
+  }
+
+  var require_context_module_1_4 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    createAudioContext: createAudioContext$1
   });
 
   const Emitter = new Vue();
@@ -2747,7 +3073,11 @@ var serviceContext = (function () {
 
   let lastStatusBarStyle;
 
-  const oldSetStatusBarStyle = plus.navigator.setStatusBarStyle;
+  let oldSetStatusBarStyle = plus.navigator.setStatusBarStyle;
+
+  function restoreOldSetStatusBarStyle (setStatusBarStyle) {
+    oldSetStatusBarStyle = setStatusBarStyle;
+  }
 
   function newSetStatusBarStyle (style) {
     lastStatusBarStyle = style;
@@ -2771,7 +3101,7 @@ var serviceContext = (function () {
       return
     }
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`[uni-app] setStatusBarStyle`, statusBarStyle);
+      console.log('[uni-app] setStatusBarStyle', statusBarStyle);
     }
 
     lastStatusBarStyle = statusBarStyle;
@@ -2841,18 +3171,18 @@ var serviceContext = (function () {
     if (t.indexOf('./') === 0) return getRealRoute$1(e, t.substr(2))
     let n;
     let i;
-    let o = t.split('/');
+    const o = t.split('/');
     for (n = 0, i = o.length; n < i && o[n] === '..'; n++);
     o.splice(0, n);
     t = o.join('/');
-    let r = e.length > 0 ? e.split('/') : [];
+    const r = e.length > 0 ? e.split('/') : [];
     r.splice(r.length - n - 1, n + 1);
     return r.concat(o).join('/')
   };
 
   // 处理 Android 平台解压与非解压模式下获取的路径不一致的情况
   const _handleLocalPath = filePath => {
-    let localUrl = plus.io.convertLocalFileSystemURL(filePath);
+    const localUrl = plus.io.convertLocalFileSystemURL(filePath);
     return localUrl.replace(/^\/?apps\//, '/android_asset/apps/').replace(/\/$/, '')
   };
 
@@ -2964,25 +3294,65 @@ var serviceContext = (function () {
     return (lng < 72.004 || lng > 137.8347) || ((lat < 0.8293 || lat > 55.8271) || false)
   };
 
-  function getStatusbarHeight () {
-    // 横屏时 iOS 获取的状态栏高度错误，进行纠正
-    return plus.navigator.isImmersedStatusbar() ? Math.round(plus.os.name === 'iOS' ? plus.navigator.getSafeAreaInsets().top : plus.navigator.getStatusbarHeight()) : 0
-  }
-
   function getScreenInfo () {
-    const orientation = plus.navigator.getOrientation();
-    const landscape = Math.abs(orientation) === 90;
-    // 安卓 plus 接口获取的屏幕大小值不为整数
-    const width = plus.screen.resolutionWidth;
-    const height = plus.screen.resolutionHeight;
-    // 根据方向纠正宽高
+    const { resolutionWidth, resolutionHeight } = plus.screen.getCurrentSize();
     return {
-      screenWidth: Math[landscape ? 'max' : 'min'](width, height),
-      screenHeight: Math[landscape ? 'min' : 'max'](width, height)
+      screenWidth: Math.round(resolutionWidth),
+      screenHeight: Math.round(resolutionHeight)
     }
   }
 
-  let audios = {};
+  function warpPlusEvent (origin, name) {
+    return function (callbackId) {
+      origin[name](function (data) {
+        if (data) {
+          delete data.code;
+          delete data.message;
+        }
+        invoke$1(callbackId, data);
+      });
+    }
+  }
+
+  function warpPlusErrorCallback (callbackId, neme, errMsg) {
+    return function errorCallback (error) {
+      error = error || {};
+      invoke$1(callbackId, {
+        errMsg: `${neme}:fail ${error.message || errMsg || ''}`,
+        errCode: error.code || 0
+      });
+    }
+  }
+
+  function warpPlusMethod (origin, name, before) {
+    return function (options, callbackId) {
+      if (typeof before === 'function') {
+        options = before(options);
+      }
+      origin[name](Object.assign(options, {
+        success (data = {}) {
+          delete data.code;
+          delete data.message;
+          invoke$1(callbackId, Object.assign({}, data, {
+            errMsg: `${name}:ok`
+          }));
+        },
+        fail: warpPlusErrorCallback(callbackId, name)
+      }));
+    }
+  }
+
+  function getFileName (path) {
+    const array = path.split('/');
+    return array[array.length - 1]
+  }
+
+  function getExtName (path) {
+    const array = path.split('.');
+    return array.length > 1 ? '.' + array[array.length - 1] : ''
+  }
+
+  const audios = {};
 
   const evts = ['play', 'canplay', 'ended', 'stop', 'waiting', 'seeking', 'seeked', 'pause'];
 
@@ -3058,7 +3428,7 @@ var serviceContext = (function () {
   }) {
     const audio = audios[audioId];
     if (audio) {
-      let style = {
+      const style = {
         loop,
         autoplay
       };
@@ -3088,7 +3458,7 @@ var serviceContext = (function () {
         errMsg: 'getAudioState:fail'
       }
     }
-    let {
+    const {
       src,
       startTime,
       volume
@@ -3098,7 +3468,7 @@ var serviceContext = (function () {
       errMsg: 'getAudioState:ok',
       duration: 1e3 * (audio.getDuration() || 0),
       currentTime: audio.isStopped ? 0 : 1e3 * audio.getPosition(),
-      paused: audio.isPaused,
+      paused: audio.isPaused(),
       src,
       volume,
       startTime: 1e3 * startTime,
@@ -3114,7 +3484,7 @@ var serviceContext = (function () {
     const audio = audios[audioId];
     const operationTypes = ['play', 'pause', 'stop'];
     if (operationTypes.indexOf(operationType) >= 0) {
-      audio[operationType === operationTypes[0] && audio.isPaused ? 'resume' : operationType]();
+      audio[operationType === operationTypes[0] && audio.isPaused() ? 'resume' : operationType]();
     } else if (operationType === 'seek') {
       audio.seekTo(currentTime / 1e3);
     }
@@ -3132,7 +3502,7 @@ var serviceContext = (function () {
     state
   }, res));
 
-  const events = ['play', 'pause', 'ended', 'stop'];
+  const events = ['play', 'pause', 'ended', 'stop', 'canplay'];
 
   function initMusic () {
     if (audio) {
@@ -3230,14 +3600,14 @@ var serviceContext = (function () {
         dataUrl: audio.src,
         duration: audio.getDuration() || 0,
         currentPosition: audio.getPosition(),
-        status: audio.isPaused ? 0 : 1,
+        status: audio.isPaused() ? 0 : 1,
         downloadPercent: Math.round(100 * audio.getBuffered() / audio.getDuration()),
-        errMsg: `getMusicPlayerState:ok`
+        errMsg: 'getMusicPlayerState:ok'
       }
     }
     return {
       status: 2,
-      errMsg: `getMusicPlayerState:ok`
+      errMsg: 'getMusicPlayerState:ok'
     }
   }
   function operateMusicPlayer ({
@@ -3270,7 +3640,7 @@ var serviceContext = (function () {
   function setBackgroundAudioState (args) {
     setMusicState(args);
     return {
-      errMsg: `setBackgroundAudioState:ok`
+      errMsg: 'setBackgroundAudioState:ok'
     }
   }
   function operateBackgroundAudio ({
@@ -3299,14 +3669,14 @@ var serviceContext = (function () {
       coverImgUrl: '',
       webUrl: '',
       startTime: 0,
-      errMsg: `getBackgroundAudioState:ok`
+      errMsg: 'getBackgroundAudioState:ok'
     };
     const audio = getAudio();
     if (audio) {
-      let newData = {
+      const newData = {
         duration: audio.getDuration() || 0,
         currentTime: audio.isStopped ? 0 : audio.getPosition(),
-        paused: audio.isPaused,
+        paused: audio.isPaused(),
         src: audio.src,
         buffered: audio.getBuffered(),
         title: audio.title,
@@ -3319,85 +3689,6 @@ var serviceContext = (function () {
       data = Object.assign(data, newData);
     }
     return data
-  }
-
-  const DEVICE_FREQUENCY = 200;
-  const NETWORK_TYPES = ['unknown', 'none', 'ethernet', 'wifi', '2g', '3g', '4g'];
-
-  const MAP_ID = '__UNIAPP_MAP';
-
-  const TEMP_PATH_BASE = '_doc/uniapp_temp';
-  const TEMP_PATH = `${TEMP_PATH_BASE}_${Date.now()}`;
-
-  /**
-   * 5+错误对象转换为错误消息
-   * @param {*} error 5+错误对象
-   */
-  function toErrMsg (error) {
-    var msg = 'base64ToTempFilePath:fail';
-    if (error && error.message) {
-      msg += ` ${error.message}`;
-    } else if (error) {
-      msg += ` ${error}`;
-    }
-    return msg
-  }
-
-  function base64ToTempFilePath ({
-    base64Data,
-    x,
-    y,
-    width,
-    height,
-    destWidth,
-    destHeight,
-    canvasId,
-    fileType,
-    quality
-  } = {}, callbackId) {
-    var id = Date.now();
-    var bitmap = new plus.nativeObj.Bitmap(`bitmap${id}`);
-    bitmap.loadBase64Data(base64Data, function () {
-      var formats = ['jpg', 'png'];
-      var format = String(fileType).toLowerCase();
-      if (formats.indexOf(format) < 0) {
-        format = 'png';
-      }
-      /**
-           * 保存配置
-           */
-      var saveOption = {
-        overwrite: true,
-        quality: typeof quality === 'number' ? quality * 100 : 100,
-        format
-      };
-      /**
-           * 保存文件路径
-           */
-      var tempFilePath = `${TEMP_PATH}/canvas/${id}.${format}`;
-
-      bitmap.save(tempFilePath, saveOption, function () {
-        clear();
-        invoke$1(callbackId, {
-          tempFilePath,
-          errMsg: 'base64ToTempFilePath:ok'
-        });
-      }, function (error) {
-        clear();
-        invoke$1(callbackId, {
-          errMsg: toErrMsg(error)
-        });
-      });
-    }, function (error) {
-      clear();
-      invoke$1(callbackId, {
-        errMsg: toErrMsg(error)
-      });
-    });
-
-    function clear () {
-      bitmap.clear();
-    }
   }
 
   function operateMapPlayer (mapId, pageVm, type, data) {
@@ -3515,7 +3806,7 @@ var serviceContext = (function () {
       isFn(callback) && callback(ret);
 
       if (type === SUCCESS || type === FAIL) {
-        const complete = callbacks['complete'];
+        const complete = callbacks.complete;
         isFn(complete) && complete(ret);
       }
     }
@@ -3525,8 +3816,8 @@ var serviceContext = (function () {
     getCenterLocation (ctx, cbs) {
       return invokeVmMethodWithoutArgs(ctx, 'getCenterLocation', cbs)
     },
-    moveToLocation (ctx) {
-      return invokeVmMethodWithoutArgs(ctx, 'moveToLocation')
+    moveToLocation (ctx, args) {
+      return invokeVmMethod(ctx, 'moveToLocation', args)
     },
     translateMarker (ctx, args) {
       return invokeVmMethod(ctx, 'translateMarker', args, ['animationEnd'])
@@ -3681,6 +3972,14 @@ var serviceContext = (function () {
   function createLivePusherContext$1 (id, vm) {
     return createLivePusherContext(id, vm)
   }
+
+  const DEVICE_FREQUENCY = 200;
+  const NETWORK_TYPES = ['unknown', 'none', 'ethernet', 'wifi', '2g', '3g', '4g'];
+
+  const MAP_ID = '__UNIAPP_MAP';
+
+  const TEMP_PATH_BASE = '_doc/uniapp_temp';
+  const TEMP_PATH = `${TEMP_PATH_BASE}_${Date.now()}`;
 
   let watchAccelerationId = false;
   let isWatchAcceleration = false;
@@ -3942,145 +4241,39 @@ var serviceContext = (function () {
     });
   }
 
-  /**
-   * 执行蓝牙相关方法
-   */
-  function bluetoothExec (method, callbackId, data = {}, beforeSuccess) {
-    var deviceId = data.deviceId;
+  const onBluetoothDeviceFound = warpPlusEvent(plus.bluetooth, 'onBluetoothDeviceFound');
+  const onBluetoothAdapterStateChange = warpPlusEvent(plus.bluetooth, 'onBluetoothAdapterStateChange');
+  const onBLEConnectionStateChange = warpPlusEvent(plus.bluetooth, 'onBLEConnectionStateChange');
+  const onBLECharacteristicValueChange = warpPlusEvent(plus.bluetooth, 'onBLECharacteristicValueChange');
+
+  function toUpperCase (options = {}) {
+    const deviceId = options.deviceId;
     if (deviceId) {
-      data.deviceId = deviceId.toUpperCase();
+      options.deviceId = deviceId.toUpperCase();
     }
-    var serviceId = data.serviceId;
+    const serviceId = options.serviceId;
     if (serviceId) {
-      data.serviceId = serviceId.toUpperCase();
+      options.serviceId = serviceId.toUpperCase();
     }
-
-    plus.bluetooth[method.replace('Changed', 'Change')](Object.assign(data, {
-      success (data) {
-        if (typeof beforeSuccess === 'function') {
-          beforeSuccess(data);
-        }
-        invoke$1(callbackId, Object.assign({}, data, {
-          errMsg: `${method}:ok`,
-          code: undefined,
-          message: undefined
-        }));
-      },
-      fail (error = {}) {
-        invoke$1(callbackId, {
-          errMsg: `${method}:fail ${error.message || ''}`,
-          errCode: error.code || 0
-        });
-      }
-    }));
-  }
-  /**
-   * 监听蓝牙相关事件
-   */
-  function bluetoothOn (method, beforeSuccess) {
-    plus.bluetooth[method.replace('Changed', 'Change')](function (data) {
-      if (typeof beforeSuccess === 'function') {
-        beforeSuccess(data);
-      }
-      publish(method, Object.assign({}, data, {
-        code: undefined,
-        message: undefined
-      }));
-    });
-    return true
+    return options
   }
 
-  function checkDevices (data) {
-    data.devices = data.devices.map(device => {
-      var advertisData = device.advertisData;
-      if (advertisData && typeof advertisData !== 'string') {
-        device.advertisData = arrayBufferToBase64$2(advertisData);
-      }
-      return device
-    });
-  }
-
-  var onBluetoothAdapterStateChange;
-  var onBluetoothDeviceFound;
-  var onBLEConnectionStateChange;
-  var onBLEConnectionStateChanged;
-  var onBLECharacteristicValueChange;
-
-  function openBluetoothAdapter (data, callbackId) {
-    onBluetoothAdapterStateChange = onBluetoothAdapterStateChange || bluetoothOn('onBluetoothAdapterStateChange');
-    bluetoothExec('openBluetoothAdapter', callbackId);
-  }
-
-  function closeBluetoothAdapter (data, callbackId) {
-    bluetoothExec('closeBluetoothAdapter', callbackId);
-  }
-
-  function getBluetoothAdapterState (data, callbackId) {
-    bluetoothExec('getBluetoothAdapterState', callbackId);
-  }
-
-  function startBluetoothDevicesDiscovery (data, callbackId) {
-    onBluetoothDeviceFound = onBluetoothDeviceFound || bluetoothOn('onBluetoothDeviceFound', checkDevices);
-    bluetoothExec('startBluetoothDevicesDiscovery', callbackId, data);
-  }
-
-  function stopBluetoothDevicesDiscovery (data, callbackId) {
-    bluetoothExec('stopBluetoothDevicesDiscovery', callbackId);
-  }
-
-  function getBluetoothDevices (data, callbackId) {
-    bluetoothExec('getBluetoothDevices', callbackId, {}, checkDevices);
-  }
-
-  function getConnectedBluetoothDevices (data, callbackId) {
-    bluetoothExec('getConnectedBluetoothDevices', callbackId, data);
-  }
-
-  function createBLEConnection (data, callbackId) {
-    onBLEConnectionStateChange = onBLEConnectionStateChange || bluetoothOn('onBLEConnectionStateChange');
-    onBLEConnectionStateChanged = onBLEConnectionStateChanged || bluetoothOn('onBLEConnectionStateChanged');
-    bluetoothExec('createBLEConnection', callbackId, data);
-  }
-
-  function closeBLEConnection (data, callbackId) {
-    bluetoothExec('closeBLEConnection', callbackId, data);
-  }
-
-  function getBLEDeviceServices (data, callbackId) {
-    bluetoothExec('getBLEDeviceServices', callbackId, data);
-  }
-
-  function getBLEDeviceCharacteristics (data, callbackId) {
-    bluetoothExec('getBLEDeviceCharacteristics', callbackId, data);
-  }
-
-  function notifyBLECharacteristicValueChange (data, callbackId) {
-    onBLECharacteristicValueChange = onBLECharacteristicValueChange || bluetoothOn('onBLECharacteristicValueChange',
-      data => {
-        data.value = arrayBufferToBase64$2(data.value);
-      });
-    bluetoothExec('notifyBLECharacteristicValueChange', callbackId, data);
-  }
-
-  function notifyBLECharacteristicValueChanged (data, callbackId) {
-    onBLECharacteristicValueChange = onBLECharacteristicValueChange || bluetoothOn('onBLECharacteristicValueChange',
-      data => {
-        data.value = arrayBufferToBase64$2(data.value);
-      });
-    bluetoothExec('notifyBLECharacteristicValueChanged', callbackId, data);
-  }
-
-  function readBLECharacteristicValue (data, callbackId) {
-    onBLECharacteristicValueChange = onBLECharacteristicValueChange || bluetoothOn('onBLECharacteristicValueChange');
-    bluetoothExec('readBLECharacteristicValue', callbackId, data);
-  }
-
-  function writeBLECharacteristicValue (data, callbackId) {
-    if (typeof data.value === 'string') {
-      data.value = base64ToArrayBuffer$2(data.value);
-    }
-    bluetoothExec('writeBLECharacteristicValue', callbackId, data);
-  }
+  const openBluetoothAdapter = warpPlusMethod(plus.bluetooth, 'openBluetoothAdapter');
+  const closeBluetoothAdapter = warpPlusMethod(plus.bluetooth, 'closeBluetoothAdapter');
+  const getBluetoothAdapterState = warpPlusMethod(plus.bluetooth, 'getBluetoothAdapterState');
+  const startBluetoothDevicesDiscovery = warpPlusMethod(plus.bluetooth, 'startBluetoothDevicesDiscovery', toUpperCase);
+  const stopBluetoothDevicesDiscovery = warpPlusMethod(plus.bluetooth, 'stopBluetoothDevicesDiscovery');
+  const getBluetoothDevices = warpPlusMethod(plus.bluetooth, 'getBluetoothDevices');
+  const getConnectedBluetoothDevices = warpPlusMethod(plus.bluetooth, 'getConnectedBluetoothDevices', toUpperCase);
+  const createBLEConnection = warpPlusMethod(plus.bluetooth, 'createBLEConnection', toUpperCase);
+  const closeBLEConnection = warpPlusMethod(plus.bluetooth, 'closeBLEConnection', toUpperCase);
+  const getBLEDeviceServices = warpPlusMethod(plus.bluetooth, 'getBLEDeviceServices', toUpperCase);
+  const getBLEDeviceCharacteristics = warpPlusMethod(plus.bluetooth, 'getBLEDeviceCharacteristics', toUpperCase);
+  const notifyBLECharacteristicValueChange = warpPlusMethod(plus.bluetooth, 'notifyBLECharacteristicValueChange', toUpperCase);
+  const readBLECharacteristicValue = warpPlusMethod(plus.bluetooth, 'readBLECharacteristicValue', toUpperCase);
+  const writeBLECharacteristicValue = warpPlusMethod(plus.bluetooth, 'writeBLECharacteristicValue', toUpperCase);
+  const setBLEMTU = warpPlusMethod(plus.bluetooth, 'setBLEMTU', toUpperCase);
+  const getBLEDeviceRSSI = warpPlusMethod(plus.bluetooth, 'getBLEDeviceRSSI', toUpperCase);
 
   function getScreenBrightness () {
     return {
@@ -4185,80 +4378,12 @@ var serviceContext = (function () {
     }
   }
 
-  let beaconUpdateState = false;
+  const onBeaconUpdate = warpPlusEvent(plus.ibeacon, 'onBeaconUpdate');
+  const onBeaconServiceChange = warpPlusEvent(plus.ibeacon, 'onBeaconServiceChange');
 
-  function onBeaconUpdate () {
-    if (!beaconUpdateState) {
-      plus.ibeacon.onBeaconUpdate(function (data) {
-        publish('onBeaconUpdated', data);
-      });
-      beaconUpdateState = true;
-    }
-  }
-
-  let beaconServiceChangeState = false;
-
-  function onBeaconServiceChange () {
-    if (!beaconServiceChangeState) {
-      plus.ibeacon.onBeaconServiceChange(function (data) {
-        publish('onBeaconServiceChange', data);
-        publish('onBeaconServiceChanged', data);
-      });
-      beaconServiceChangeState = true;
-    }
-  }
-
-  function getBeacons (params, callbackId) {
-    plus.ibeacon.getBeacons({
-      success: (result) => {
-        invoke$1(callbackId, {
-          errMsg: 'getBeacons:ok',
-          beacons: result.beacons
-        });
-      },
-      fail: (error) => {
-        invoke$1(callbackId, {
-          errMsg: 'getBeacons:fail:' + error.message
-        });
-      }
-    });
-  }
-
-  function startBeaconDiscovery ({
-    uuids,
-    ignoreBluetoothAvailable = false
-  }, callbackId) {
-    plus.ibeacon.startBeaconDiscovery({
-      uuids,
-      ignoreBluetoothAvailable,
-      success: (result) => {
-        invoke$1(callbackId, {
-          errMsg: 'startBeaconDiscovery:ok',
-          beacons: result.beacons
-        });
-      },
-      fail: (error) => {
-        invoke$1(callbackId, {
-          errMsg: 'startBeaconDiscovery:fail:' + error.message
-        });
-      }
-    });
-  }
-
-  function stopBeaconDiscovery (params, callbackId) {
-    plus.ibeacon.stopBeaconDiscovery({
-      success: (result) => {
-        invoke$1(callbackId, Object.assign(result, {
-          errMsg: 'stopBeaconDiscovery:ok'
-        }));
-      },
-      fail: (error) => {
-        invoke$1(callbackId, {
-          errMsg: 'stopBeaconDiscovery:fail:' + error.message
-        });
-      }
-    });
-  }
+  const getBeacons = warpPlusMethod(plus.ibeacon, 'getBeacons');
+  const startBeaconDiscovery = warpPlusMethod(plus.ibeacon, 'startBeaconDiscovery');
+  const stopBeaconDiscovery = warpPlusMethod(plus.ibeacon, 'stopBeaconDiscovery');
 
   function makePhoneCall$1 ({
     phoneNumber
@@ -4275,8 +4400,6 @@ var serviceContext = (function () {
   const ANI_DURATION = 300;
 
   const ANI_CLOSE = downgrade ? 'slide-out-right' : 'pop-out';
-
-  const TITLEBAR_HEIGHT = 44;
 
   const ON_REACH_BOTTOM_DISTANCE = 50;
 
@@ -4330,18 +4453,19 @@ var serviceContext = (function () {
 
   const MESSAGE_TYPE = 'scanCode';
 
-  function scanCode ({
+  function scanCode$1 ({
     onlyFromCamera = false,
-    scanType
+    scanType,
+    autoDecodeCharSet
   }, callbackId) {
     const barcode = plus.barcode;
     const SCAN_TYPES = {
-      'qrCode': [
+      qrCode: [
         barcode.QR,
         barcode.AZTEC,
         barcode.MAXICODE
       ],
-      'barCode': [
+      barCode: [
         barcode.EAN13,
         barcode.EAN8,
         barcode.UPCA,
@@ -4354,8 +4478,8 @@ var serviceContext = (function () {
         barcode.RSS14,
         barcode.RSSEXPANDED
       ],
-      'datamatrix': [barcode.DATAMATRIX],
-      'pdf417': [barcode.PDF417]
+      datamatrix: [barcode.DATAMATRIX],
+      pdf417: [barcode.PDF417]
     };
 
     const SCAN_MAPS = {
@@ -4391,8 +4515,8 @@ var serviceContext = (function () {
       });
     }
     if (!filters.length) {
-      filters = filters.concat(SCAN_TYPES['qrCode']).concat(SCAN_TYPES['barCode']).concat(SCAN_TYPES['datamatrix']).concat(
-        SCAN_TYPES['pdf417']);
+      filters = filters.concat(SCAN_TYPES.qrCode).concat(SCAN_TYPES.barCode).concat(SCAN_TYPES.datamatrix).concat(
+        SCAN_TYPES.pdf417);
     }
 
     const buttons = [];
@@ -4404,18 +4528,19 @@ var serviceContext = (function () {
         width: '60px',
         onclick: function () {
           plus.gallery.pick(file => {
-            barcode.scan(file, (type, code) => {
+            barcode.scan(file, (type, code, path, charSet) => {
               if (isDark) {
                 plus.navigator.setStatusBarStyle('isDark');
               }
               result = {
                 type,
-                code
+                code,
+                charSet
               };
               webview.close('auto');
             }, () => {
               plus.nativeUI.toast('识别失败');
-            }, filters);
+            }, filters, autoDecodeCharSet);
           }, err => {
             if (err.code !== 12) {
               plus.nativeUI.toast('选择失败');
@@ -4444,6 +4569,7 @@ var serviceContext = (function () {
       __uniapp_type: 'scan',
       __uniapp_dark: isDark,
       __uniapp_scan_type: filters,
+      __uniapp_auto_decode_char_set: autoDecodeCharSet,
       'uni-app': 'none'
     });
     const waiting = plus.nativeUI.showWaiting();
@@ -4457,7 +4583,7 @@ var serviceContext = (function () {
         invoke$1(callbackId, {
           result: result.code,
           scanType: SCAN_MAPS[result.type] || '',
-          charSet: 'utf8',
+          charSet: result.charSet || 'utf8',
           path: '',
           errMsg: 'scanCode:ok'
         });
@@ -4493,7 +4619,7 @@ var serviceContext = (function () {
     __proto__: null,
     SCAN_ID: SCAN_ID,
     SCAN_PATH: SCAN_PATH,
-    scanCode: scanCode
+    scanCode: scanCode$1
   });
 
   let plus_;
@@ -4545,6 +4671,7 @@ var serviceContext = (function () {
     constructor (webview) {
       this.webview = webview;
     }
+
     sendMessage (data) {
       const message = {
         __message: {
@@ -4559,6 +4686,7 @@ var serviceContext = (function () {
         plus_.webview.postMessageToUniNView(message, id);
       }
     }
+
     close () {
       this.webview.close();
     }
@@ -4633,16 +4761,14 @@ var serviceContext = (function () {
     return style
   }
 
-  function scanCode$1 (options, callbackId) {
+  function scanCode$2 (options, callbackId) {
     const statusBarStyle = getStatusBarStyle$1();
     const isDark = statusBarStyle !== 'light';
 
     let result;
     const page = showPage({
       url: '__uniappscan',
-      data: {
-        scanType: options.scanType
-      },
+      data: options,
       style: {
         animationType: options.animationType || 'pop-in',
         titleNView: {
@@ -4703,10 +4829,10 @@ var serviceContext = (function () {
 
   var weex$1 = /*#__PURE__*/Object.freeze({
     __proto__: null,
-    scanCode: scanCode$1
+    scanCode: scanCode$2
   });
 
-  function scanCode$2 (...array) {
+  function scanCode$3 (...array) {
     const api = __uniConfig.nvueCompiler !== 'weex' ? weex$1 : webview;
     return api.scanCode(...array)
   }
@@ -4725,7 +4851,7 @@ var serviceContext = (function () {
   }
 
   function checkIsSupportSoterAuthentication () {
-    let supportMode = [];
+    const supportMode = [];
     if (checkIsSupportFingerPrint()) {
       supportMode.push('fingerPrint');
     }
@@ -4804,7 +4930,7 @@ var serviceContext = (function () {
         errMsg: 'startSoterAuthentication:fail'
       }
     }
-    let supportRequestAuthMode = [];
+    const supportRequestAuthMode = [];
     requestAuthModes.map((item, index) => {
       if (supportMode.indexOf(item) > -1) {
         supportRequestAuthMode.push(item);
@@ -4817,7 +4943,7 @@ var serviceContext = (function () {
         errMsg: 'startSoterAuthentication:fail no corresponding mode'
       }
     }
-    let enrolledRequestAuthMode = [];
+    const enrolledRequestAuthMode = [];
     supportRequestAuthMode.map((item, index) => {
       const checked = checkIsSoterEnrolledInDevice({
         checkAuthMode: item
@@ -4933,15 +5059,7 @@ var serviceContext = (function () {
     }
   }
 
-  var safeAreaInsets = {
-    get bottom () {
-      if (plus.os.name === 'iOS') {
-        const safeArea = plus.navigator.getSafeAreaInsets();
-        return safeArea ? safeArea.bottom : 0
-      }
-      return 0
-    }
-  };
+  const NAVBAR_HEIGHT = 44;
 
   const TABBAR_HEIGHT = 50;
   const isIOS$1 = plus.os.name === 'iOS';
@@ -5028,7 +5146,7 @@ var serviceContext = (function () {
     });
   }
 
-  let maskClickCallback = [];
+  const maskClickCallback = [];
 
   var tabBar$1 = {
     id: '0',
@@ -5098,13 +5216,12 @@ var serviceContext = (function () {
       return visible
     },
     get height () {
-      return (config && config.height ? parseFloat(config.height) : TABBAR_HEIGHT) + safeAreaInsets.bottom
+      return (config && config.height ? parseFloat(config.height) : TABBAR_HEIGHT) + plus.navigator.getSafeAreaInsets().deviceBottom
     },
     // tabBar是否遮挡内容区域
     get cover () {
       const array = ['extralight', 'light', 'dark'];
-      // 设置背景颜色会失效
-      return isIOS$1 && array.indexOf(config.blurEffect) >= 0 && !config.backgroundColor
+      return isIOS$1 && array.indexOf(config.blurEffect) >= 0
     },
     setStyle ({ mask }) {
       tabBar.setMask({
@@ -5115,10 +5232,15 @@ var serviceContext = (function () {
       maskClickCallback.push(callback);
     },
     removeEventListener (name, callback) {
-      let callbackIndex = maskClickCallback.indexOf(callback);
+      const callbackIndex = maskClickCallback.indexOf(callback);
       maskClickCallback.splice(callbackIndex, 1);
     }
   };
+
+  function getStatusbarHeight () {
+    // 横屏时 iOS 获取的状态栏高度错误，进行纠正
+    return plus.navigator.isImmersedStatusbar() ? Math.round(plus.os.name === 'iOS' ? plus.navigator.getSafeAreaInsets().top : plus.navigator.getStatusbarHeight()) : 0
+  }
 
   function getSystemInfoSync () {
     return callApiSync(getSystemInfo, Object.create(null), 'getSystemInfo', 'getSystemInfoSync')
@@ -5143,7 +5265,7 @@ var serviceContext = (function () {
       let style = webview.getStyle();
       style = style && style.titleNView;
       if (style && style.type && style.type !== 'none') {
-        titleNView.height = style.type === 'transparent' ? 0 : (statusBarHeight + TITLEBAR_HEIGHT);
+        titleNView.height = style.type === 'transparent' ? 0 : (statusBarHeight + NAVBAR_HEIGHT);
         titleNView.cover = style.type === 'transparent' || style.type === 'float';
       }
       safeAreaInsets = webview.getSafeAreaInsets();
@@ -5225,67 +5347,39 @@ var serviceContext = (function () {
 
   const SAVED_DIR = 'uniapp_save';
   const SAVE_PATH = `_doc/${SAVED_DIR}`;
-  const REGEX_FILENAME = /^.*[/]/;
 
   function getSavedFileDir (success, fail) {
-    fail = fail || function () {};
+    fail = fail || function () { };
     plus.io.requestFileSystem(plus.io.PRIVATE_DOC, fs => { // 请求_doc fs
       fs.root.getDirectory(SAVED_DIR, { // 获取文件保存目录对象
         create: true
-      }, dir => {
-        success(dir);
-      }, err => {
-        fail('目录[' + SAVED_DIR + ']创建失败' + err.message);
-      });
-    }, err => {
-      fail('目录[_doc]读取失败' + err.message);
-    });
+      }, success, fail);
+    }, fail);
   }
 
-  function saveFile ({
+  let index = 0;
+  function saveFile$1 ({
     tempFilePath
   } = {}, callbackId) {
-    let fileName = tempFilePath.replace(REGEX_FILENAME, '');
-    if (fileName) {
-      let extName = '';
-      if (~fileName.indexOf('.')) {
-        extName = '.' + fileName.split('.').pop();
-      }
+    const errorCallback = warpPlusErrorCallback(callbackId, 'saveFile');
+    const fileName = `${Date.now()}${index++}${getExtName(tempFilePath)}`;
 
-      fileName = (+new Date()) + '' + extName;
-
-      plus.io.resolveLocalFileSystemURL(getRealPath$1(tempFilePath), entry => { // 读取临时文件 FileEntry
-        getSavedFileDir(dir => {
-          entry.copyTo(dir, fileName, () => { // 复制临时文件 FileEntry，为了避免把相册里的文件删除，使用 copy，微信中是要删除临时文件的
-            const savedFilePath = SAVE_PATH + '/' + fileName;
-            invoke$1(callbackId, {
-              errMsg: 'saveFile:ok',
-              savedFilePath
-            });
-          }, err => {
-            invoke$1(callbackId, {
-              errMsg: 'saveFile:fail 保存文件[' + tempFilePath +
-                '] copyTo 失败:' + err.message
-            });
-          });
-        }, message => {
+    plus.io.resolveLocalFileSystemURL(tempFilePath, entry => { // 读取临时文件 FileEntry
+      getSavedFileDir(dir => {
+        entry.copyTo(dir, fileName, () => { // 复制临时文件 FileEntry，为了避免把相册里的文件删除，使用 copy，微信中是要删除临时文件的
+          const savedFilePath = SAVE_PATH + '/' + fileName;
           invoke$1(callbackId, {
-            errMsg: 'saveFile:fail ' + message
+            errMsg: 'saveFile:ok',
+            savedFilePath
           });
-        });
-      }, err => {
-        invoke$1(callbackId, {
-          errMsg: 'saveFile:fail 文件[' + tempFilePath + ']读取失败' + err.message
-        });
-      });
-    } else {
-      return {
-        errMsg: 'saveFile:fail 文件名[' + tempFilePath + ']不存在'
-      }
-    }
+        }, errorCallback);
+      }, errorCallback);
+    }, errorCallback);
   }
 
   function getSavedFileList (options, callbackId) {
+    const errorCallback = warpPlusErrorCallback(callbackId, 'getSavedFileList');
+
     getSavedFileDir(entry => {
       var reader = entry.createReader();
 
@@ -5305,11 +5399,7 @@ var serviceContext = (function () {
                   fileList
                 });
               }
-            }, error => {
-              invoke$1(callbackId, {
-                errMsg: 'getSavedFileList:fail ' + error.message
-              });
-            }, false);
+            }, errorCallback, false);
           });
         } else {
           invoke$1(callbackId, {
@@ -5317,84 +5407,40 @@ var serviceContext = (function () {
             fileList
           });
         }
-      }, error => {
-        invoke$1(callbackId, {
-          errMsg: 'getSavedFileList:fail ' + error.message
-        });
-      });
-    }, message => {
-      invoke$1(callbackId, {
-        errMsg: 'getSavedFileList:fail ' + message
-      });
-    });
+      }, errorCallback);
+    }, errorCallback);
   }
 
-  function getFileInfo ({
-    filePath,
-    digestAlgorithm = 'md5'
-  } = {}, callbackId) {
-    // TODO 计算文件摘要
-    plus.io.resolveLocalFileSystemURL(getRealPath$1(filePath), entry => {
-      entry.getMetadata(meta => {
-        invoke$1(callbackId, {
-          errMsg: 'getFileInfo:ok',
-          size: meta.size,
-          digestAlgorithm: ''
-        });
-      }, err => {
-        invoke$1(callbackId, {
-          errMsg: 'getFileInfo:fail 文件[' +
-            filePath +
-            '] getMetadata 失败:' + err.message
-        });
-      });
-    }, err => {
-      invoke$1(callbackId, {
-        errMsg: 'getFileInfo:fail 文件[' + filePath + ']读取失败:' + err.message
-      });
-    });
-  }
+  const getFileInfo$1 = warpPlusMethod(plus.io, 'getFileInfo');
 
-  function getSavedFileInfo ({
+  function getSavedFileInfo$1 ({
     filePath
   } = {}, callbackId) {
-    plus.io.resolveLocalFileSystemURL(getRealPath$1(filePath), entry => {
+    const errorCallback = warpPlusErrorCallback(callbackId, 'getSavedFileInfo');
+
+    plus.io.resolveLocalFileSystemURL(filePath, entry => {
       entry.getMetadata(meta => {
         invoke$1(callbackId, {
           createTime: meta.modificationTime.getTime(),
           size: meta.size,
           errMsg: 'getSavedFileInfo:ok'
         });
-      }, error => {
-        invoke$1(callbackId, {
-          errMsg: 'getSavedFileInfo:fail ' + error.message
-        });
-      }, false);
-    }, () => {
-      invoke$1(callbackId, {
-        errMsg: 'getSavedFileInfo:fail file not find'
-      });
-    });
+      }, errorCallback, false);
+    }, errorCallback);
   }
 
-  function removeSavedFile ({
+  function removeSavedFile$1 ({
     filePath
   } = {}, callbackId) {
-    plus.io.resolveLocalFileSystemURL(getRealPath$1(filePath), entry => {
+    const errorCallback = warpPlusErrorCallback(callbackId, 'removeSavedFile');
+
+    plus.io.resolveLocalFileSystemURL(filePath, entry => {
       entry.remove(() => {
         invoke$1(callbackId, {
           errMsg: 'removeSavedFile:ok'
         });
-      }, err => {
-        invoke$1(callbackId, {
-          errMsg: 'removeSavedFile:fail 文件[' + filePath + ']删除失败:' + err.message
-        });
-      });
-    }, () => {
-      invoke$1(callbackId, {
-        errMsg: 'removeSavedFile:fail file not find'
-      });
-    });
+      }, errorCallback);
+    }, errorCallback);
   }
 
   function openDocument$1 ({
@@ -5460,7 +5506,7 @@ var serviceContext = (function () {
       });
     }
     let index = 0;
-    let onShow = function () {
+    const onShow = function () {
       index++;
       if (index === 2) {
         webview.evalJS(`__chooseLocation__(${JSON.stringify(params)})`);
@@ -5685,14 +5731,21 @@ var serviceContext = (function () {
     openLocation: openLocation$1
   });
 
-  function openLocation$2 (data) {
+  function openLocation$2 (data, callbackId) {
     showPage({
       url: '__uniappopenlocation',
       data,
       style: {
         titleNView: {
           type: 'transparent'
-        }
+        },
+        popGesture: 'close',
+        backButtonAutoControl: 'close'
+      },
+      onClose () {
+        invoke$1(callbackId, {
+          errMsg: 'openLocation:fail cancel'
+        });
       }
     });
     return {
@@ -5815,239 +5868,197 @@ var serviceContext = (function () {
    * @param {string} filePath 文件路径
    * @returns {Promise} 文件信息Promise
    */
-  function getFileInfo$1 (filePath) {
+  function getFileInfo$2 (filePath) {
     return new Promise((resolve, reject) => {
       plus.io.resolveLocalFileSystemURL(filePath, function (entry) {
-        entry.getMetadata(function (meta) {
-          resolve({
-            size: meta.size
-          });
-        }, reject, false);
+        entry.getMetadata(resolve, reject, false);
       }, reject);
     })
   }
 
-  const invokeChooseImage = function (callbackId, type, sizeType, tempFilePaths = []) {
-    if (!tempFilePaths.length) {
-      invoke$1(callbackId, {
-        code: sizeType,
-        errMsg: `chooseImage:${type}`
-      });
-      return
-    }
-    var tempFiles = [];
-    // plus.zip.compressImage 压缩文件并发调用在iOS端容易出现问题（图像错误、闪退），改为队列执行
-    tempFilePaths.reduce((promise, tempFilePath, index, array) => {
-      return promise
-        .then(() => {
-          return getFileInfo$1(tempFilePath)
-        })
-        .then(fileInfo => {
-          var size = fileInfo.size;
-          // 压缩阈值 0.5 兆
-          var threshold = 1024 * 1024 * 0.5;
-          // 判断是否需要压缩
-          if ((sizeType.indexOf('compressed') >= 0 && sizeType.indexOf('original') < 0) || (((
-            sizeType.indexOf(
-              'compressed') < 0 && sizeType.indexOf('original') < 0) || (sizeType
-            .indexOf('compressed') >= 0 && sizeType.indexOf(
-            'original') >= 0)) && size > threshold)) {
-            return new Promise((resolve, reject) => {
-              var dstPath = TEMP_PATH + '/compressed/' + Date.now() + (
-                tempFilePath.match(/\.\S+$/) || [''])[0];
-              plus.nativeUI.showWaiting();
-              plus.zip.compressImage({
-                src: tempFilePath,
-                dst: dstPath,
-                overwrite: true
-              }, () => {
-                resolve(dstPath);
-              }, (error) => {
-                reject(error);
-              });
-            })
-              .then(dstPath => {
-                array[index] = tempFilePath = dstPath;
-                return getFileInfo$1(tempFilePath)
-              })
-              .then(fileInfo => {
-                return tempFiles.push({
-                  path: tempFilePath,
-                  size: fileInfo.size
-                })
-              })
-          }
-          return tempFiles.push({
-            path: tempFilePath,
-            size: size
-          })
-        })
-    }, Promise.resolve())
-      .then(() => {
+  function compressImage (tempFilePath) {
+    const dstPath = `${TEMP_PATH}/compressed/${Date.now()}_${getFileName(tempFilePath)}`;
+    return new Promise((resolve, reject) => {
+      plus.nativeUI.showWaiting();
+      plus.zip.compressImage({
+        src: tempFilePath,
+        dst: dstPath,
+        overwrite: true
+      }, () => {
         plus.nativeUI.closeWaiting();
+        resolve(dstPath);
+      }, (error) => {
+        plus.nativeUI.closeWaiting();
+        reject(error);
+      });
+    })
+  }
+
+  function chooseImage$1 ({
+    count,
+    sizeType,
+    sourceType
+  } = {}, callbackId) {
+    const errorCallback = warpPlusErrorCallback(callbackId, 'chooseImage', 'cancel');
+
+    function successCallback (paths) {
+      const tempFiles = [];
+      const tempFilePaths = [];
+      // plus.zip.compressImage 压缩文件并发调用在iOS端容易出现问题（图像错误、闪退），改为队列执行
+      paths.reduce((promise, path) => {
+        return promise.then(() => {
+          return getFileInfo$2(path)
+        }).then(fileInfo => {
+          const size = fileInfo.size;
+          // 压缩阈值 0.5 兆
+          const THRESHOLD = 1024 * 1024 * 0.5;
+          // 判断是否需要压缩
+          if (sizeType.includes('compressed') && size > THRESHOLD) {
+            return compressImage(path).then(dstPath => {
+              path = dstPath;
+              return getFileInfo$2(path)
+            })
+          }
+          return fileInfo
+        }).then(({ size }) => {
+          tempFilePaths.push(path);
+          tempFiles.push({
+            path,
+            size
+          });
+        })
+      }, Promise.resolve()).then(() => {
         invoke$1(callbackId, {
-          errMsg: `chooseImage:${type}`,
+          errMsg: 'chooseImage:ok',
           tempFilePaths,
           tempFiles
         });
-      }).catch(() => {
-        plus.nativeUI.closeWaiting();
-        invoke$1(callbackId, {
-          errMsg: `chooseImage:${type}`
+      }).catch(errorCallback);
+    }
+
+    function openCamera () {
+      const camera = plus.camera.getCamera();
+      camera.captureImage(path => successCallback([path]),
+        errorCallback, {
+          filename: TEMP_PATH + '/camera/',
+          resolution: 'high'
         });
+    }
+
+    function openAlbum () {
+      plus.gallery.pick(({ files }) => successCallback(files), errorCallback, {
+        maximum: count,
+        multiple: true,
+        system: false,
+        filename: TEMP_PATH + '/gallery/'
       });
-  };
-  const openCamera = function (callbackId, sizeType) {
-    const camera = plus.camera.getCamera();
-    camera.captureImage(e => invokeChooseImage(callbackId, 'ok', sizeType, [e]),
-      e => invokeChooseImage(callbackId, 'fail', 1), {
+    }
+
+    if (sourceType.length === 1) {
+      if (sourceType.includes('album')) {
+        openAlbum();
+        return
+      } else if (sourceType.includes('camera')) {
+        openCamera();
+        return
+      }
+    }
+    plus.nativeUI.actionSheet({
+      cancel: '取消',
+      buttons: [{
+        title: '拍摄'
+      }, {
+        title: '从手机相册选择'
+      }]
+    }, (e) => {
+      switch (e.index) {
+        case 1:
+          openCamera();
+          break
+        case 2:
+          openAlbum();
+          break
+        default:
+          errorCallback();
+          break
+      }
+    });
+  }
+
+  function chooseVideo$1 ({
+    sourceType,
+    maxDuration,
+    camera
+  } = {}, callbackId) {
+    const errorCallback = warpPlusErrorCallback(callbackId, 'chooseVideo', 'cancel');
+
+    function successCallback (tempFilePath = '') {
+      plus.io.getVideoInfo({
+        filePath: tempFilePath,
+        success (videoInfo) {
+          const result = {
+            errMsg: 'chooseVideo:ok',
+            tempFilePath: tempFilePath
+          };
+          result.size = videoInfo.size;
+          result.duration = videoInfo.duration;
+          result.width = videoInfo.width;
+          result.height = videoInfo.height;
+          invoke$1(callbackId, result);
+        },
+        errorCallback
+      });
+    }
+
+    function openAlbum () {
+      plus.gallery.pick(successCallback, errorCallback, {
+        filter: 'video',
+        system: false,
+        filename: TEMP_PATH + '/gallery/'
+      });
+    }
+
+    function openCamera () {
+      const plusCamera = plus.camera.getCamera();
+      plusCamera.startVideoCapture(successCallback, errorCallback, {
+        index: camera === 'front' ? 2 : 1,
+        videoMaximumDuration: maxDuration,
         filename: TEMP_PATH + '/camera/'
       });
-  };
-  const openAlbum = function (callbackId, sizeType, count) {
-    // TODO Android 需要拷贝到 temp 目录
-    plus.gallery.pick(e => invokeChooseImage(callbackId, 'ok', sizeType, e.files.map(file => {
-      return file
-    })), e => {
-      invokeChooseImage(callbackId, 'fail', 2);
-    }, {
-      maximum: count,
-      multiple: true,
-      system: false,
-      filename: TEMP_PATH + '/gallery/'
-    });
-  };
+    }
 
-  function chooseImage$1 ({
-    count = 9,
-    sizeType = ['original', 'compressed'],
-    sourceType = ['album', 'camera']
-  } = {}, callbackId) {
-    let fallback = true;
     if (sourceType.length === 1) {
-      if (sourceType[0] === 'album') {
-        fallback = false;
-        openAlbum(callbackId, sizeType, count);
-      } else if (sourceType[0] === 'camera') {
-        fallback = false;
-        openCamera(callbackId, sizeType);
+      if (sourceType.includes('album')) {
+        openAlbum();
+        return
+      } else if (sourceType.includes('camera')) {
+        openCamera();
+        return
       }
     }
-    if (fallback) {
-      plus.nativeUI.actionSheet({
-        cancel: '取消',
-        buttons: [{
-          title: '拍摄'
-        }, {
-          title: '从手机相册选择'
-        }]
-      }, (e) => {
-        switch (e.index) {
-          case 0:
-            invokeChooseImage(callbackId, 'fail', 0);
-            break
-          case 1:
-            openCamera(callbackId, sizeType);
-            break
-          case 2:
-            openAlbum(callbackId, sizeType, count);
-            break
-        }
-      });
-    }
+    plus.nativeUI.actionSheet({
+      cancel: '取消',
+      buttons: [{
+        title: '拍摄'
+      }, {
+        title: '从手机相册选择'
+      }]
+    }, e => {
+      switch (e.index) {
+        case 1:
+          openCamera();
+          break
+        case 2:
+          openAlbum();
+          break
+        default:
+          errorCallback();
+          break
+      }
+    });
   }
 
-  const invokeChooseVideo = function (callbackId, type, tempFilePath = '') {
-    let callbackResult = {
-      errMsg: `chooseVideo:${type}`,
-      tempFilePath: tempFilePath,
-      duration: 0,
-      size: 0,
-      height: 0,
-      width: 0
-    };
-
-    if (type !== 'ok') {
-      invoke$1(callbackId, callbackResult);
-      return
-    }
-
-    plus.io.getVideoInfo({
-      filePath: tempFilePath,
-      success (videoInfo) {
-        callbackResult.size = videoInfo.size;
-        callbackResult.duration = videoInfo.duration;
-        callbackResult.width = videoInfo.width;
-        callbackResult.height = videoInfo.height;
-        invoke$1(callbackId, callbackResult);
-      },
-      fail () {
-        invoke$1(callbackId, callbackResult);
-      },
-      complete () {
-        invoke$1(callbackId, callbackResult);
-      }
-    });
-  };
-  const openCamera$1 = function (callbackId, maxDuration, cameraIndex) {
-    const camera = plus.camera.getCamera();
-    camera.startVideoCapture(e => invokeChooseVideo(callbackId, 'ok', e), e => invokeChooseVideo(
-      callbackId, 'fail'), {
-      index: cameraIndex,
-      videoMaximumDuration: maxDuration,
-      filename: TEMP_PATH + '/camera/'
-    });
-  };
-  const openAlbum$1 = function (callbackId) {
-    plus.gallery.pick(e => {
-      invokeChooseVideo(callbackId, 'ok', e);
-    }, e => invokeChooseVideo(callbackId, 'fail'), {
-      filter: 'video',
-      system: false,
-      filename: TEMP_PATH + '/gallery/'
-    });
-  };
-  function chooseVideo$1 ({
-    sourceType = ['album', 'camera'],
-    maxDuration = 60,
-    camera = 'back'
-  } = {}, callbackId) {
-    let fallback = true;
-    let cameraIndex = (camera === 'front') ? 2 : 1;
-    if (sourceType.length === 1) {
-      if (sourceType[0] === 'album') {
-        fallback = false;
-        openAlbum$1(callbackId);
-      } else if (sourceType[0] === 'camera') {
-        fallback = false;
-        openCamera$1(callbackId, maxDuration, cameraIndex);
-      }
-    }
-    if (fallback) {
-      plus.nativeUI.actionSheet({
-        cancel: '取消',
-        buttons: [{
-          title: '拍摄'
-        }, {
-          title: '从手机相册选择'
-        }]
-      }, e => {
-        switch (e.index) {
-          case 0:
-            invokeChooseVideo(callbackId, 'fail');
-            break
-          case 1:
-            openCamera$1(callbackId, maxDuration, cameraIndex);
-            break
-          case 2:
-            openAlbum$1(callbackId);
-            break
-        }
-      });
-    }
-  }
-
-  function compressImage ({
+  function compressImage$1 ({
     src,
     quality
   }, callbackId) {
@@ -6058,35 +6069,17 @@ var serviceContext = (function () {
       quality
     }, () => {
       invoke$1(callbackId, {
-        errMsg: `compressImage:ok`,
+        errMsg: 'compressImage:ok',
         tempFilePath: dst
       });
     }, () => {
       invoke$1(callbackId, {
-        errMsg: `compressImage:fail`
+        errMsg: 'compressImage:fail'
       });
     });
   }
 
-  function getImageInfo$1 ({
-    src
-  } = {}, callbackId) {
-    // fixed by hxy
-    plus.io.getImageInfo({
-      src,
-      success (imageInfo) {
-        invoke$1(callbackId, {
-          errMsg: 'getImageInfo:ok',
-          ...imageInfo
-        });
-      },
-      fail () {
-        invoke$1(callbackId, {
-          errMsg: 'getImageInfo:fail'
-        });
-      }
-    });
-  }
+  const getImageInfo$1 = warpPlusMethod(plus.io, 'getImageInfo');
 
   function previewImagePlus ({
     current = 0,
@@ -6115,7 +6108,7 @@ var serviceContext = (function () {
         let itemList = [];
         let itemColor = '';
         let title = '';
-        let hasLongPressActions = longPressActions && longPressActions.callbackId;
+        const hasLongPressActions = longPressActions && longPressActions.callbackId;
         if (!hasLongPressActions) {
           itemList = ['保存相册'];
           itemColor = '#000000';
@@ -6235,7 +6228,7 @@ var serviceContext = (function () {
     }
   }
 
-  function saveImageToPhotosAlbum ({
+  function saveImageToPhotosAlbum$1 ({
     filePath
   } = {}, callbackId) {
     plus.gallery.save(getRealPath$1(filePath), e => {
@@ -6297,7 +6290,7 @@ var serviceContext = (function () {
       }
     });
     for (const name in header) {
-      if (header.hasOwnProperty(name)) {
+      if (hasOwn(header, name)) {
         downloader.setRequestHeader(name, header[name]);
       }
     }
@@ -6354,13 +6347,36 @@ var serviceContext = (function () {
     delete requestTasks[requestTaskId];
   };
 
+  const cookiesPrase = header => {
+    let cookiesStr = header['Set-Cookie'] || header['set-cookie'];
+    let cookiesArr = [];
+    if (!cookiesStr) {
+      return []
+    }
+    if (cookiesStr[0] === '[' && cookiesStr[cookiesStr.length - 1] === ']') {
+      cookiesStr = cookiesStr.slice(1, -1);
+    }
+    const handleCookiesArr = cookiesStr.split(';');
+    for (let i = 0; i < handleCookiesArr.length; i++) {
+      if (handleCookiesArr[i].indexOf('Expires=') !== -1) {
+        cookiesArr.push(handleCookiesArr[i].replace(',', ''));
+      } else {
+        cookiesArr.push(handleCookiesArr[i]);
+      }
+    }
+    cookiesArr = cookiesArr.join(';').split(',');
+
+    return cookiesArr
+  };
+
   function createRequestTaskById (requestTaskId, {
     url,
     data,
     header,
     method = 'GET',
     responseType,
-    sslVerify = true
+    sslVerify = true,
+    firstIpv4 = false
   } = {}) {
     const stream = requireNativePlugin('stream');
     const headers = {};
@@ -6373,10 +6389,11 @@ var serviceContext = (function () {
         hasContentType = true;
         headers['Content-Type'] = header[name];
         // TODO 需要重构
-        if (method !== 'GET' && header[name].indexOf('application/x-www-form-urlencoded') === 0 && typeof data !== 'string' && !(data instanceof ArrayBuffer)) {
-          let bodyArray = [];
-          for (let key in data) {
-            if (data.hasOwnProperty(key)) {
+        if (method !== 'GET' && header[name].indexOf('application/x-www-form-urlencoded') === 0 && typeof data !==
+          'string' && !(data instanceof ArrayBuffer)) {
+          const bodyArray = [];
+          for (const key in data) {
+            if (hasOwn(data, key)) {
               bodyArray.push(encodeURIComponent(key) + '=' + encodeURIComponent(data[key]));
             }
           }
@@ -6401,7 +6418,7 @@ var serviceContext = (function () {
           statusCode: 0,
           errMsg: 'timeout'
         });
-      }, (timeout + 200));// TODO +200 发消息到原生层有时间开销，以后考虑由原生层回调超时
+      }, (timeout + 200)); // TODO +200 发消息到原生层有时间开销，以后考虑由原生层回调超时
     }
     const options = {
       method,
@@ -6412,10 +6429,11 @@ var serviceContext = (function () {
       // weex 官方文档未说明实际支持 timeout，单位：ms
       timeout: timeout || 6e5,
       // 配置和weex模块内相反
-      sslVerify: !sslVerify
+      sslVerify: !sslVerify,
+      firstIpv4: firstIpv4
     };
     if (method !== 'GET') {
-      options.body = data;
+      options.body = typeof data === 'string' ? data : JSON.stringify(data);
     }
     try {
       stream.fetch(options, ({
@@ -6437,7 +6455,8 @@ var serviceContext = (function () {
             state: 'success',
             data: ok && responseType === 'arraybuffer' ? base64ToArrayBuffer$2(data) : data,
             statusCode,
-            header: headers
+            header: headers,
+            cookies: cookiesPrase(headers)
           });
         } else {
           publishStateChange$1({
@@ -6646,12 +6665,12 @@ var serviceContext = (function () {
     });
 
     for (const name in header) {
-      if (header.hasOwnProperty(name)) {
+      if (hasOwn(header, name)) {
         uploader.setRequestHeader(name, header[name]);
       }
     }
     for (const name in formData) {
-      if (formData.hasOwnProperty(name)) {
+      if (hasOwn(formData, name)) {
         uploader.addData(name, String(formData[name]));
       }
     }
@@ -7010,28 +7029,28 @@ var serviceContext = (function () {
   }
 
   // 0:图文，1:纯文字，2:纯图片，3:音乐，4:视频，5:小程序
-  const TYPES = {
-    '0': {
+  const TYPES$1 = {
+    0: {
       name: 'web',
       title: '图文'
     },
-    '1': {
+    1: {
       name: 'text',
       title: '纯文字'
     },
-    '2': {
+    2: {
       name: 'image',
       title: '纯图片'
     },
-    '3': {
+    3: {
       name: 'music',
       title: '音乐'
     },
-    '4': {
+    4: {
       name: 'video',
       title: '视频'
     },
-    '5': {
+    5: {
       name: 'miniProgram',
       title: '小程序'
     }
@@ -7056,9 +7075,9 @@ var serviceContext = (function () {
       imageUrl = getRealPath$1(imageUrl);
     }
 
-    const shareType = TYPES[type + ''];
+    const shareType = TYPES$1[type + ''];
     if (shareType) {
-      let sendMsg = {
+      const sendMsg = {
         provider,
         type: shareType.name,
         title,
@@ -7214,7 +7233,7 @@ var serviceContext = (function () {
     }
     plus.share.sendWithSystem({
       type,
-      pictures: imageUrl ? [imageUrl] : void 0,
+      pictures: imageUrl && [imageUrl],
       content,
       href
     }, function (res) {
@@ -7246,6 +7265,7 @@ var serviceContext = (function () {
       }
       weex = newWeex;
       plus = newPlus;
+      restoreOldSetStatusBarStyle(plus.navigator.setStatusBarStyle);
       plus.navigator.setStatusBarStyle = newSetStatusBarStyle;
       /* eslint-disable no-global-assign */
       setTimeout = newSetTimeout;
@@ -7253,6 +7273,7 @@ var serviceContext = (function () {
       setInterval = newSetInterval;
       clearInterval = newClearInterval;
     }
+    __uniConfig.serviceReady = true;
   }
 
   function wrapper$1 (webview) {
@@ -7276,7 +7297,7 @@ var serviceContext = (function () {
       return
     }
     const maskColor = webview.__uniapp_mask;
-    let maskWebview = webview.__uniapp_mask_id === '0' ? {
+    const maskWebview = webview.__uniapp_mask_id === '0' ? {
       setStyle ({
         mask
       }) {
@@ -7316,10 +7337,13 @@ var serviceContext = (function () {
 
   function getSubNVueById (id) {
     const webview = plus.webview.getWebviewById(id);
+    if (webview === null || webview === undefined) {
+      throw new Error('Unable to find SubNVue, id=' + id)
+    }
     if (webview && !webview.$processed) {
       wrapper$1(webview);
     }
-    let oldSetStyle = webview.setStyle;
+    const oldSetStyle = webview.setStyle;
     var parentWebview = plus.webview.getWebviewById(webview.__uniapp_mask_id);
     webview.setStyle = function (style) {
       if (style && style.mask) {
@@ -7338,15 +7362,15 @@ var serviceContext = (function () {
   }
 
   const callbacks$3 = [];
+  // 不使用uni-core/service/platform中的onMethod，避免循环引用
+  UniServiceJSBridge.on('api.uniMPNativeEvent', function (res) {
+    callbacks$3.forEach(callbackId => {
+      invoke$1(callbackId, res.event, res.data);
+    });
+  });
 
-  function onNativeEventReceive (callback) {
-    isFn(callback) &&
-      callbacks$3.indexOf(callback) === -1 &&
-      callbacks$3.push(callback);
-  }
-
-  function consumeNativeEvent (event, data) {
-    callbacks$3.forEach(callback => callback(event, data));
+  function onNativeEventReceive (callbackId) {
+    callbacks$3.push(callbackId);
   }
 
   function sendNativeEvent (event, data, callback) {
@@ -7354,114 +7378,123 @@ var serviceContext = (function () {
     return weex.requireModule('plus').sendNativeEvent(event, data, callback)
   }
 
-  let firstBackTime = 0;
+  const loadedSubPackages = [];
 
-  function quit () {
-    if (!firstBackTime) {
-      firstBackTime = Date.now();
-      plus.nativeUI.toast('再按一次退出应用');
-      setTimeout(() => {
-        firstBackTime = null;
-      }, 2000);
-    } else if (Date.now() - firstBackTime < 2000) {
-      plus.runtime.quit();
-    }
-  }
-
-  function backWebview (webview, callback) {
-    const children = webview.children();
-    if (!children || !children.length) { // 有子 webview
-      return callback()
-    }
-    const childWebview = children[0];
-    childWebview.canBack(({
-      canBack
-    }) => {
-      if (canBack) {
-        childWebview.back(); // webview 返回
-      } else {
-        callback();
-      }
-    });
-  }
-
-  function back (delta, animationType, animationDuration) {
-    const pages = getCurrentPages();
-    const len = pages.length;
-    const currentPage = pages[len - 1];
-
-    if (delta > 1) {
-      // 中间页隐藏
-      pages.slice(len - delta, len - 1).reverse().forEach(deltaPage => {
-        deltaPage.$getAppWebview().close('none');
-      });
-    }
-
-    const backPage = function (webview) {
-      if (animationType) {
-        webview.close(animationType, animationDuration || ANI_DURATION);
-      } else {
-        if (currentPage.$page.openType === 'redirect') { // 如果是 redirectTo 跳转的，需要制定 back 动画
-          webview.close(ANI_CLOSE, ANI_DURATION);
-        }
-        webview.close('auto');
-      }
-
-      pages.slice(len - delta, len).forEach(page => page.$remove());
-
-      setStatusBarStyle();
-
-      UniServiceJSBridge.emit('onAppRoute', {
-        type: 'navigateBack'
-      });
-    };
-
-    const webview = currentPage.$getAppWebview();
-    if (!currentPage.__uniapp_webview) {
-      return backPage(webview)
-    }
-    backWebview(webview, () => {
-      backPage(webview);
-    });
-  }
-
-  function navigateBack$1 ({
-    from = 'navigateBack',
-    delta,
-    animationType,
-    animationDuration
-  }) {
-    const pages = getCurrentPages();
-
-    const currentPage = pages[pages.length - 1];
-    if (
-      currentPage.$vm &&
-      currentPage.$vm.$options.onBackPress &&
-      currentPage.$vm.__call_hook &&
-      currentPage.$vm.__call_hook('onBackPress', {
-        from
-      })
-    ) {
+  /**
+   * 指定路由 ready 后，检查是否触发分包预加载
+   * @param {Object} route
+   */
+  function preloadSubPackages (route) {
+    if (!__uniConfig.preloadRule) {
       return
     }
+    const options = __uniConfig.preloadRule[route];
+    if (!options || !Array.isArray(options.packages)) {
+      return
+    }
+    const packages = options.packages.filter(root => loadedSubPackages.indexOf(root) === -1);
+    if (!packages.length) {
+      return
+    }
+    loadSubPackages(options.packages);
+    // 暂不需要网络下载
+    // const network = options.network || 'wifi'
+    // if (network === 'wifi') {
+    //   uni.getNetworkType({
+    //     success (res) {
+    //       if (process.env.NODE_ENV !== 'production') {
+    //         console.log('UNIAPP[preloadRule]:' + res.networkType + ':' + JSON.stringify(options))
+    //       }
+    //       if (res.networkType === 'wifi') {
+    //         loadSubPackages(options.packages)
+    //       }
+    //     }
+    //   })
+    // } else {
+    //   if (process.env.NODE_ENV !== 'production') {
+    //     console.log('UNIAPP[preloadRule]:' + JSON.stringify(options))
+    //   }
+    //   loadSubPackages(options.packages)
+    // }
+  }
 
-    uni.hideToast(); // 后退时，关闭 toast,loading
+  function loadPage (route, callback) {
+    let isInSubPackage = false;
+    const subPackages = __uniConfig.subPackages;
+    if (Array.isArray(subPackages)) {
+      const subPackage = subPackages.find(subPackage => route.indexOf(subPackage.root) === 0);
+      if (subPackage) {
+        isInSubPackage = true;
+        loadSubPackage$1(subPackage.root, callback);
+      }
+    }
+    if (!isInSubPackage) {
+      callback();
+    }
+  }
 
-    if (currentPage.$page.meta.isQuit) {
-      quit();
-    } else if (currentPage.$page.id === 1 && __uniConfig.realEntryPagePath) {
-      // condition
-      __uniConfig.entryPagePath = __uniConfig.realEntryPagePath;
-      delete __uniConfig.realEntryPagePath;
-      uni.reLaunch({
-        url: '/' + __uniConfig.entryPagePath
+  function loadSubPackage$1 (root, callback) {
+    if (loadedSubPackages.indexOf(root) !== -1) {
+      return callback()
+    }
+    loadSubPackages([root], () => {
+      callback();
+    });
+  }
+
+  const SUB_FILENAME = 'app-sub-service.js';
+
+  function evaluateScriptFiles (files, callback) {
+    __uniConfig.onServiceReady(() => {
+      weex.requireModule('plus').evalJSFiles(files, callback);
+    });
+  }
+
+  function loadSubPackages (packages, callback) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('UNIAPP[loadSubPackages]:' + JSON.stringify(packages));
+    }
+    const startTime = Date.now();
+    evaluateScriptFiles(packages.map(root => {
+      loadedSubPackages.push(root);
+      return root + '/' + SUB_FILENAME
+    }), res => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('UNIAPP[loadSubPackages]:耗时(' + (Date.now() - startTime) + ')');
+      }
+      callback && callback(true);
+    });
+  }
+
+  const SUB_FILENAME$1 = 'app-sub-service.js';
+
+  function evaluateScriptFile (file, callback) {
+    __uniConfig.onServiceReady(() => {
+      weex.requireModule('plus').evalJSFiles([file], callback);
+    });
+  }
+
+  function loadSubPackage$2 ({
+    root
+  }, callbackId) {
+    if (loadedSubPackages.indexOf(root) !== -1) {
+      return {
+        errMsg: 'loadSubPackage:ok'
+      }
+    }
+    loadedSubPackages.push(root);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('UNIAPP[loadSubPackage]:' + root);
+    }
+    const startTime = Date.now();
+    evaluateScriptFile(root + '/' + SUB_FILENAME$1, res => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('UNIAPP[loadSubPackage]:耗时(' + (Date.now() - startTime) + ')');
+      }
+      invoke$1(callbackId, {
+        errMsg: 'loadSubPackage:ok'
       });
-    } else {
-      back(delta, animationType, animationDuration);
-    }
-    return {
-      errMsg: 'navigateBack:ok'
-    }
+    });
   }
 
   function createButtonOnClick (index) {
@@ -7510,9 +7543,9 @@ var serviceContext = (function () {
     const titleImage = windowOptions.titleImage || '';
     const transparentTitle = windowOptions.transparentTitle || 'none';
     const titleNViewTypeList = {
-      'none': 'default',
-      'auto': 'transparent',
-      'always': 'float'
+      none: 'default',
+      auto: 'transparent',
+      always: 'float'
     };
 
     const ret = {
@@ -7522,13 +7555,13 @@ var serviceContext = (function () {
       type: titleNViewTypeList[transparentTitle],
       backgroundColor: windowOptions.navigationBarBackgroundColor || '#f8f8f8',
       tags: titleImage === '' ? [] : [{
-        'tag': 'img',
-        'src': titleImage,
-        'position': {
-          'left': 'auto',
-          'top': 'auto',
-          'width': 'auto',
-          'height': '26px'
+        tag: 'img',
+        src: titleImage,
+        position: {
+          left: 'auto',
+          top: 'auto',
+          width: 'auto',
+          height: '26px'
         }
       }]
     };
@@ -7623,7 +7656,9 @@ var serviceContext = (function () {
   ];
 
   function parseWebviewStyle (id, path, routeOptions = {}) {
-    const webviewStyle = Object.create(null);
+    const webviewStyle = {
+      bounce: 'vertical'
+    };
 
     // 合并
     routeOptions.window = parseStyleUnit(Object.assign(
@@ -7636,6 +7671,16 @@ var serviceContext = (function () {
         webviewStyle[name] = routeOptions.window[name];
       }
     });
+
+    const backgroundColor = routeOptions.window.backgroundColor;
+    if (backgroundColor) {
+      if (!webviewStyle.background) {
+        webviewStyle.background = backgroundColor;
+      }
+      if (!webviewStyle.backgroundColorTop) {
+        webviewStyle.backgroundColorTop = backgroundColor;
+      }
+    }
 
     const titleNView = parseTitleNView(routeOptions);
     if (titleNView) {
@@ -7769,7 +7814,7 @@ var serviceContext = (function () {
       style.dock = 'top';
       style.top = 0;
       style.width = '100%';
-      style.height = TITLEBAR_HEIGHT + getStatusbarHeight();
+      style.height = NAVBAR_HEIGHT + getStatusbarHeight();
       delete style.left;
       delete style.right;
       delete style.bottom;
@@ -7841,6 +7886,8 @@ var serviceContext = (function () {
     };
     webview.addEventListener('resize', debounce(onResize, 50));
   }
+
+  const VD_SYNC_VERSION = 2;
 
   const PAGE_CREATE = 2;
   const MOUNTED_DATA = 4;
@@ -7925,10 +7972,11 @@ var serviceContext = (function () {
   let id$1 = 2;
 
   const WEBVIEW_LISTENERS = {
-    'pullToRefresh': 'onPullDownRefresh',
-    'titleNViewSearchInputChanged': 'onNavigationBarSearchInputChanged',
-    'titleNViewSearchInputConfirmed': 'onNavigationBarSearchInputConfirmed',
-    'titleNViewSearchInputClicked': 'onNavigationBarSearchInputClicked'
+    pullToRefresh: 'onPullDownRefresh',
+    titleNViewSearchInputChanged: 'onNavigationBarSearchInputChanged',
+    titleNViewSearchInputConfirmed: 'onNavigationBarSearchInputConfirmed',
+    titleNViewSearchInputClicked: 'onNavigationBarSearchInputClicked',
+    titleNViewSearchInputFocusChanged: 'onNavigationBarSearchInputFocusChanged'
   };
 
   function setPreloadWebview (webview) {
@@ -7937,6 +7985,14 @@ var serviceContext = (function () {
 
   function noop$1 (str) {
     return str
+  }
+
+  function getUniPageUrl (path, query) {
+    const queryString = query ? stringifyQuery(query, noop$1) : '';
+    return {
+      path: path.substr(1),
+      query: queryString ? queryString.substr(1) : queryString
+    }
   }
 
   function getDebugRefresh (path, query, routeOptions) {
@@ -7950,7 +8006,7 @@ var serviceContext = (function () {
     }
   }
 
-  function createWebview (path, routeOptions, query) {
+  function createWebview (path, routeOptions, query, extras = {}) {
     if (routeOptions.meta.isNVue) {
       const webviewId = id$1++;
       const webviewStyle = parseWebviewStyle(
@@ -7958,13 +8014,15 @@ var serviceContext = (function () {
         path,
         routeOptions
       );
-      webviewStyle.debugRefresh = getDebugRefresh(path, query, routeOptions);
+      webviewStyle.uniPageUrl = getUniPageUrl(path, query);
       if (process.env.NODE_ENV !== 'production') {
-        console.log(`[uni-app] createWebview`, webviewId, path, webviewStyle);
+        console.log('[uni-app] createWebview', webviewId, path, webviewStyle);
       }
-      return plus.webview.create('', String(webviewId), webviewStyle, {
+      // android 需要使用
+      webviewStyle.isTab = !!routeOptions.meta.isTabBar;
+      return plus.webview.create('', String(webviewId), webviewStyle, Object.assign({
         nvue: true
-      })
+      }, extras))
     }
     if (id$1 === 2) { // 如果首页非 nvue，则直接返回 Launch Webview
       return plus.webview.getLaunchWebview()
@@ -7981,9 +8039,17 @@ var serviceContext = (function () {
         '',
         routeOptions
       );
-      webviewStyle.debugRefresh = getDebugRefresh(path, query, routeOptions);
+
+      webviewStyle.uniPageUrl = getUniPageUrl(path, query);
+
+      if (!routeOptions.meta.isNVue) {
+        webviewStyle.debugRefresh = getDebugRefresh(path, query, routeOptions);
+      } else {
+        // android 需要使用
+        webviewStyle.isTab = !!routeOptions.meta.isTabBar;
+      }
       if (process.env.NODE_ENV !== 'production') {
-        console.log(`[uni-app] updateWebview`, webviewStyle);
+        console.log('[uni-app] updateWebview', webviewStyle);
       }
 
       webview.setStyle(webviewStyle);
@@ -8045,6 +8111,17 @@ var serviceContext = (function () {
 
   let todoNavigator = false;
 
+  function setTodoNavigator (path, callback, msg) {
+    todoNavigator = {
+      path: path,
+      nvue: __uniRoutes.find(route => route.path === path).meta.isNVue,
+      navigate: callback
+    };
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`todoNavigator:${todoNavigator.path} ${msg}`);
+    }
+  }
+
   function navigate (path, callback, isAppLaunch) {
     {
       if (isAppLaunch && __uniConfig.splashscreen && __uniConfig.splashscreen.autoclose && (!__uniConfig.splashscreen.alwaysShowBeforeRender)) {
@@ -8053,20 +8130,20 @@ var serviceContext = (function () {
       if (!isAppLaunch && todoNavigator) {
         return console.error(`已存在待跳转页面${todoNavigator.path},请不要连续多次跳转页面${path}`)
       }
+      if (__uniConfig.renderer === 'native') { // 纯原生无需wait逻辑
+        // 如果是首页还未初始化，需要等一等，其他无需等待
+        if (getCurrentPages().length === 0) {
+          return setTodoNavigator(path, callback, 'waitForReady')
+        }
+        return callback()
+      }
       // 未创建 preloadWebview 或 preloadWebview 已被使用
       const waitPreloadWebview = !preloadWebview || (preloadWebview && preloadWebview.__uniapp_route);
       // 已创建未 loaded
       const waitPreloadWebviewReady = preloadWebview && !preloadWebview.loaded;
 
       if (waitPreloadWebview || waitPreloadWebviewReady) {
-        todoNavigator = {
-          path: path,
-          nvue: __uniRoutes.find(route => route.path === path).meta.isNVue,
-          navigate: callback
-        };
-        if (process.env.NODE_ENV !== 'production') {
-          console.log(`todoNavigator:${todoNavigator.path} ${waitPreloadWebview ? 'waitForCreate' : 'waitForReady'}`);
-        }
+        setTodoNavigator(path, callback, waitPreloadWebview ? 'waitForCreate' : 'waitForReady');
       } else {
         callback();
       }
@@ -8092,6 +8169,15 @@ var serviceContext = (function () {
 
   function navigateFinish () {
     {
+      if (__uniConfig.renderer === 'native') {
+        if (!todoNavigator) {
+          return
+        }
+        if (todoNavigator.nvue) {
+          return todoNavigate()
+        }
+        return
+      }
       // 创建预加载
       const preloadWebview = createPreloadWebview();
       if (process.env.NODE_ENV !== 'production') {
@@ -8109,6 +8195,10 @@ var serviceContext = (function () {
     }
   }
 
+  function closeWebview (webview, animationType, animationDuration) {
+    webview[webview.__preload__ ? 'hide' : 'close'](animationType, animationDuration);
+  }
+
   function showWebview (webview, animationType, animationDuration, showCallback, delay) {
     if (typeof delay === 'undefined') {
       delay = webview.nvue ? 0 : 100;
@@ -8123,19 +8213,228 @@ var serviceContext = (function () {
     if (process.env.NODE_ENV !== 'production') {
       console.log(`[show][${Date.now()}]`, delay);
     }
+    const duration = animationDuration || ANI_DURATION;
     setTimeout(() => {
+      const execShowCallback = function () {
+        if (execShowCallback._called) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('execShowCallback.prevent');
+          }
+          return
+        }
+        execShowCallback._called = true;
+        showCallback && showCallback();
+        navigateFinish();
+      };
+      const timer = setTimeout(() => {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`[show.callback.timer][${Date.now()}]`);
+        }
+        execShowCallback();
+      }, duration + 150);
       webview.show(
         animationType || ANI_SHOW,
-        animationDuration || ANI_DURATION,
+        duration,
         () => {
           if (process.env.NODE_ENV !== 'production') {
             console.log(`[show.callback][${Date.now()}]`);
           }
-          showCallback && showCallback();
-          navigateFinish();
+          if (!execShowCallback._called) {
+            clearTimeout(timer);
+          }
+          execShowCallback();
         }
       );
     }, delay);
+  }
+
+  let firstBackTime = 0;
+
+  function quit () {
+    if (!firstBackTime) {
+      firstBackTime = Date.now();
+      plus.nativeUI.toast('再按一次退出应用');
+      setTimeout(() => {
+        firstBackTime = null;
+      }, 2000);
+    } else if (Date.now() - firstBackTime < 2000) {
+      plus.runtime.quit();
+    }
+  }
+
+  function backWebview (webview, callback) {
+    const children = webview.children();
+    if (!children || !children.length) { // 有子 webview
+      return callback()
+    }
+    const childWebview = children[0];
+    childWebview.canBack(({
+      canBack
+    }) => {
+      if (canBack) {
+        childWebview.back(); // webview 返回
+      } else {
+        callback();
+      }
+    });
+  }
+
+  function back (delta, animationType, animationDuration) {
+    const pages = getCurrentPages();
+    const len = pages.length;
+    const currentPage = pages[len - 1];
+
+    if (delta > 1) {
+      // 中间页隐藏
+      pages.slice(len - delta, len - 1).reverse().forEach(deltaPage => {
+        closeWebview(deltaPage.$getAppWebview(), 'none');
+      });
+    }
+
+    const backPage = function (webview) {
+      if (animationType) {
+        closeWebview(webview, animationType, animationDuration || ANI_DURATION);
+      } else {
+        if (currentPage.$page.openType === 'redirect') { // 如果是 redirectTo 跳转的，需要制定 back 动画
+          closeWebview(webview, ANI_CLOSE, ANI_DURATION);
+        } else {
+          closeWebview(webview, 'auto');
+        }
+      }
+
+      pages.slice(len - delta, len).forEach(page => page.$remove());
+
+      setStatusBarStyle();
+
+      UniServiceJSBridge.emit('onAppRoute', {
+        type: 'navigateBack'
+      });
+    };
+
+    const webview = currentPage.$getAppWebview();
+    if (!currentPage.__uniapp_webview) {
+      return backPage(webview)
+    }
+    backWebview(webview, () => {
+      backPage(webview);
+    });
+  }
+
+  function navigateBack$1 ({
+    from = 'navigateBack',
+    delta,
+    animationType,
+    animationDuration
+  }) {
+    const pages = getCurrentPages();
+
+    const currentPage = pages[pages.length - 1];
+    if (
+      currentPage.$vm &&
+      currentPage.$vm.$options.onBackPress &&
+      currentPage.$vm.__call_hook &&
+      currentPage.$vm.__call_hook('onBackPress', {
+        from
+      })
+    ) {
+      return
+    }
+
+    // 后退时，关闭 toast,loading
+    uni.hideToast();
+    uni.hideLoading();
+
+    if (currentPage.$page.meta.isQuit) {
+      quit();
+    } else if (currentPage.$page.id === 1 && __uniConfig.realEntryPagePath) {
+      // condition
+      __uniConfig.entryPagePath = __uniConfig.realEntryPagePath;
+      delete __uniConfig.realEntryPagePath;
+      uni.reLaunch({
+        url: '/' + __uniConfig.entryPagePath
+      });
+    } else {
+      back(delta, animationType, animationDuration);
+    }
+    return {
+      errMsg: 'navigateBack:ok'
+    }
+  }
+
+  class EventChannel {
+    constructor (id, events) {
+      this.id = id;
+      this.listener = {};
+      this.emitCache = {};
+      if (events) {
+        Object.keys(events).forEach(name => {
+          this.on(name, events[name]);
+        });
+      }
+    }
+
+    emit (eventName, ...args) {
+      const fns = this.listener[eventName];
+      if (!fns) {
+        return (this.emitCache[eventName] || (this.emitCache[eventName] = [])).push(args)
+      }
+      fns.forEach(opt => {
+        opt.fn.apply(opt.fn, args);
+      });
+      this.listener[eventName] = fns.filter(opt => opt.type !== 'once');
+    }
+
+    on (eventName, fn) {
+      this._addListener(eventName, 'on', fn);
+      this._clearCache(eventName);
+    }
+
+    once (eventName, fn) {
+      this._addListener(eventName, 'once', fn);
+      this._clearCache(eventName);
+    }
+
+    off (eventName, fn) {
+      const fns = this.listener[eventName];
+      if (!fns) {
+        return
+      }
+      if (fn) {
+        for (let i = 0; i < fns.length;) {
+          if (fns[i].fn === fn) {
+            fns.splice(i, 1);
+            i--;
+          }
+          i++;
+        }
+      } else {
+        delete this.listener[eventName];
+      }
+    }
+
+    _clearCache (eventName) {
+      const cacheArgs = this.emitCache[eventName];
+      if (cacheArgs) {
+        for (; cacheArgs.length > 0;) {
+          this.emit.apply(this, [eventName].concat(cacheArgs.shift()));
+        }
+      }
+    }
+
+    _addListener (eventName, type, fn) {
+      (this.listener[eventName] || (this.listener[eventName] = [])).push({
+        fn,
+        type
+      });
+    }
+  }
+
+  let id$2 = 0;
+
+  function initEventChannel (events, cache = true) {
+    id$2++;
+    const eventChannel = new EventChannel(id$2, events);
+    return eventChannel
   }
 
   const pageFactory = Object.create(null);
@@ -8152,7 +8451,7 @@ var serviceContext = (function () {
     if (!pageFactory[pagePath]) {
       console.error(`${pagePath} not found`);
     }
-    let startTime = Date.now();
+    const startTime = Date.now();
     const pageVm = new (getPageVueComponent(pagePath))({
       mpType: 'page',
       pageId,
@@ -8161,9 +8460,60 @@ var serviceContext = (function () {
       pageInstance
     });
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`new ${pagePath}`, Date.now() - startTime);
+      console.log(`new ${pagePath}[${pageId}]:time(${Date.now() - startTime})`);
     }
     return pageVm
+  }
+
+  let isInitEntryPage = false;
+
+  function initEntryPage () {
+    if (isInitEntryPage) {
+      return
+    }
+    isInitEntryPage = true;
+
+    let entryPagePath;
+    let entryPageQuery;
+
+    const weexPlus = weex.requireModule('plus');
+
+    if (weexPlus.getRedirectInfo) {
+      const info = weexPlus.getRedirectInfo() || {};
+      entryPagePath = info.path;
+      entryPageQuery = info.query ? ('?' + info.query) : '';
+    } else {
+      const argsJsonStr = plus.runtime.arguments;
+      if (!argsJsonStr) {
+        return
+      }
+      try {
+        const args = JSON.parse(argsJsonStr);
+        entryPagePath = args.path || args.pathName;
+        entryPageQuery = args.query ? ('?' + args.query) : '';
+      } catch (e) {}
+    }
+
+    if (!entryPagePath || entryPagePath === __uniConfig.entryPagePath) {
+      return
+    }
+
+    const entryRoute = '/' + entryPagePath;
+    const routeOptions = __uniRoutes.find(route => route.path === entryRoute);
+    if (!routeOptions) {
+      return
+    }
+
+    if (!routeOptions.meta.isTabBar) {
+      __uniConfig.realEntryPagePath = __uniConfig.realEntryPagePath || __uniConfig.entryPagePath;
+    }
+
+    __uniConfig.entryPagePath = entryPagePath;
+    __uniConfig.entryPageQuery = entryPageQuery;
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[uni-app] entryPagePath(${entryPagePath + entryPageQuery})`);
+    }
   }
 
   const pages = [];
@@ -8174,6 +8524,53 @@ var serviceContext = (function () {
     })
   }
 
+  const preloadWebviews = {};
+
+  function removePreloadWebview (webview) {
+    const url = Object.keys(preloadWebviews).find(url => preloadWebviews[url].id === webview.id);
+    if (url) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[uni-app] removePreloadWebview(${webview.id})`);
+      }
+      delete preloadWebviews[url];
+    }
+  }
+
+  function closePreloadWebview ({
+    url
+  }) {
+    const webview = preloadWebviews[url];
+    if (webview) {
+      if (webview.__page__) {
+        if (!getCurrentPages$1(true).find(page => page === webview.__page__)) {
+          // 未使用
+          webview.close('none');
+        } else { // 被使用
+          webview.__preload__ = false;
+        }
+      } else { // 未使用
+        webview.close('none');
+      }
+      delete preloadWebviews[url];
+    }
+    return webview
+  }
+
+  function preloadWebview$1 ({
+    url,
+    path,
+    query
+  }) {
+    if (!preloadWebviews[url]) {
+      const routeOptions = JSON.parse(JSON.stringify(__uniRoutes.find(route => route.path === path)));
+      preloadWebviews[url] = createWebview(path, routeOptions, query, {
+        __preload__: true,
+        __query__: JSON.stringify(query)
+      });
+    }
+    return preloadWebviews[url]
+  }
+
   /**
    * 首页需要主动registerPage，二级页面路由跳转时registerPage
    */
@@ -8182,15 +8579,40 @@ var serviceContext = (function () {
     path,
     query,
     openType,
-    webview
+    webview,
+    eventChannel
   }) {
+    // fast 模式，nvue 首页时，初始化下 entry page
+    webview && initEntryPage();
+
+    if (preloadWebviews[url]) {
+      webview = preloadWebviews[url];
+      if (webview.__page__) {
+        // 该预载页面已处于显示状态,不再使用该预加载页面,直接新开
+        if (getCurrentPages$1(true).find(page => page === webview.__page__)) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.log(`[uni-app] preloadWebview(${path},${webview.id}) already in use`);
+          }
+          webview = null;
+        } else {
+          if (eventChannel) {
+            webview.__page__.eventChannel = eventChannel;
+          }
+          pages.push(webview.__page__);
+          if (process.env.NODE_ENV !== 'production') {
+            console.log(`[uni-app] reuse preloadWebview(${path},${webview.id})`);
+          }
+          return webview
+        }
+      }
+    }
     const routeOptions = JSON.parse(JSON.stringify(__uniRoutes.find(route => route.path === path)));
 
     if (
       openType === 'reLaunch' ||
       (
         !__uniConfig.realEntryPagePath &&
-        pages.length === 0
+        getCurrentPages$1().length === 0 // redirectTo
       )
     ) {
       routeOptions.meta.isQuit = true;
@@ -8209,13 +8631,15 @@ var serviceContext = (function () {
       routeOptions.meta.visible = true;
     }
 
-    if (routeOptions.meta.isTabBar && webview.id !== '1') {
+    if (routeOptions.meta.isTabBar) {
       tabBar$1.append(webview);
     }
 
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`[uni-app] registerPage`, path, webview.id);
+      console.log(`[uni-app] registerPage(${path},${webview.id})`);
     }
+
+    const isLaunchNVuePage = webview.id === '1' && webview.nvue;
 
     initWebview(webview, routeOptions, path, query);
 
@@ -8231,22 +8655,24 @@ var serviceContext = (function () {
         // 导致 webview.getStyle 等逻辑出错(旧的 webview 内部 plus 被释放)
         return plus.webview.getWebviewById(webview.id)
       },
+      eventChannel,
       $page: {
         id: parseInt(webview.id),
         meta: routeOptions.meta,
         path,
         route,
+        fullPath: url,
         openType
       },
       $remove () {
         const index = pages.findIndex(page => page === this);
         if (index !== -1) {
-          pages.splice(index, 1);
           if (!webview.nvue) {
             this.$vm.$destroy();
           }
+          pages.splice(index, 1);
           if (process.env.NODE_ENV !== 'production') {
-            console.log(`[uni-app] removePage`, path, webview.id);
+            console.log('[uni-app] removePage(' + path + ')[' + webview.id + ']');
           }
         }
       },
@@ -8261,8 +8687,19 @@ var serviceContext = (function () {
 
     pages.push(pageInstance);
 
+    if (webview.__preload__) {
+      webview.__page__ = pageInstance;
+    }
+
     // 首页是 nvue 时，在 registerPage 时，执行路由堆栈
-    if (webview.id === '1' && webview.nvue) {
+    if (isLaunchNVuePage) {
+      if (
+        __uniConfig.splashscreen &&
+        __uniConfig.splashscreen.autoclose &&
+        !__uniConfig.splashscreen.alwaysShowBeforeRender
+      ) {
+        plus.navigator.closeSplashscreen();
+      }
       __uniConfig.onReady(function () {
         navigateFinish();
       });
@@ -8272,7 +8709,9 @@ var serviceContext = (function () {
       if (!webview.nvue) {
         const pageId = webview.id;
         try {
-          createPage(route, pageId, query, pageInstance).$mount();
+          loadPage(route, () => {
+            createPage(route, pageId, query, pageInstance).$mount();
+          });
         } catch (e) {
           console.error(e);
         }
@@ -8286,6 +8725,7 @@ var serviceContext = (function () {
     url,
     path,
     query,
+    events,
     animationType,
     animationDuration
   }, callbackId) {
@@ -8294,18 +8734,21 @@ var serviceContext = (function () {
       path
     });
 
+    const eventChannel = initEventChannel(events, false);
     showWebview(
       registerPage({
         url,
         path,
         query,
-        openType: 'navigate'
+        openType: 'navigate',
+        eventChannel
       }),
       animationType,
       animationDuration,
       () => {
         invoke$1(callbackId, {
-          errMsg: 'navigateTo:ok'
+          errMsg: 'navigateTo:ok',
+          eventChannel
         });
       }
     );
@@ -8314,6 +8757,7 @@ var serviceContext = (function () {
 
   function navigateTo$1 ({
     url,
+    events,
     openType,
     animationType,
     animationDuration
@@ -8321,7 +8765,7 @@ var serviceContext = (function () {
     const urls = url.split('?');
     const path = urls[0];
     const routeStyles = __uniRoutes.find(route => route.path === path).window;
-    const globalStyle = __uniConfig.window;
+    const globalStyle = __uniConfig.window || {};
     if (!animationType) {
       animationType = routeStyles.animationType || globalStyle.animationType || ANI_SHOW;
     }
@@ -8334,6 +8778,7 @@ var serviceContext = (function () {
         url,
         path,
         query,
+        events,
         animationType,
         animationDuration
       }, callbackId);
@@ -8365,7 +8810,7 @@ var serviceContext = (function () {
       () => {
         pages.forEach(page => {
           page.$remove();
-          page.$getAppWebview().close('none');
+          closeWebview(page.$getAppWebview(), 'none');
         });
         invoke$1(callbackId, {
           errMsg: 'reLaunch:ok'
@@ -8391,13 +8836,47 @@ var serviceContext = (function () {
     });
   }
 
+  function hasLifecycleHook (vueOptions = {}, hook) {
+    return Array.isArray(vueOptions[hook]) && vueOptions[hook].length
+  }
+
+  function findExistsPageIndex (url) {
+    const pages = getCurrentPages();
+    let len = pages.length;
+    while (len--) {
+      const page = pages[len];
+      if (page.$page && page.$page.fullPath === url) {
+        return len
+      }
+    }
+    return -1
+  }
+
   function _redirectTo ({
     url,
     path,
-    query
+    query,
+    exists
   }, callbackId) {
     const pages = getCurrentPages();
-    const lastPage = pages[pages.length - 1];
+    const len = pages.length - 1;
+    if (exists === 'back') {
+      const existsPageIndex = findExistsPageIndex(url);
+      if (existsPageIndex !== -1) {
+        const delta = len - existsPageIndex;
+        if (delta > 0) {
+          navigateBack$1({
+            delta
+          });
+          invoke$1(callbackId, {
+            errMsg: 'redirectTo:ok'
+          });
+          return
+        }
+      }
+    }
+
+    const lastPage = pages[len];
 
     lastPage && lastPage.$remove();
 
@@ -8411,7 +8890,13 @@ var serviceContext = (function () {
       'none',
       0,
       () => {
-        lastPage && lastPage.$getAppWebview().close('none');
+        if (lastPage) {
+          const webview = lastPage.$getAppWebview();
+          if (webview.__preload__) {
+            removePreloadWebview(webview);
+          }
+          webview.close('none');
+        }
         invoke$1(callbackId, {
           errMsg: 'redirectTo:ok'
         });
@@ -8421,7 +8906,8 @@ var serviceContext = (function () {
     setStatusBarStyle();
   }
   function redirectTo$1 ({
-    url
+    url,
+    exists
   }, callbackId) {
     const urls = url.split('?');
     const path = urls[0];
@@ -8430,7 +8916,8 @@ var serviceContext = (function () {
       _redirectTo({
         url,
         path,
-        query
+        query,
+        exists
       }, callbackId);
     });
   }
@@ -8438,6 +8925,7 @@ var serviceContext = (function () {
   function _switchTab ({
     url,
     path,
+    query,
     from
   }, callbackId) {
     tabBar$1.switchTab(path.slice(1));
@@ -8460,16 +8948,16 @@ var serviceContext = (function () {
         pages.reverse().forEach(page => {
           if (!page.$page.meta.isTabBar && page !== currentPage) {
             page.$remove();
-            page.$getAppWebview().close('none');
+            closeWebview(page.$getAppWebview(), 'none');
           }
         });
         currentPage.$remove();
         // 延迟执行避免iOS应用退出
         setTimeout(() => {
           if (currentPage.$page.openType === 'redirect') {
-            currentPage.$getAppWebview().close(ANI_CLOSE, ANI_DURATION);
+            closeWebview(currentPage.$getAppWebview(), ANI_CLOSE, ANI_DURATION);
           } else {
-            currentPage.$getAppWebview().close('auto');
+            closeWebview(currentPage.$getAppWebview(), 'auto');
           }
         }, 100);
       } else {
@@ -8500,14 +8988,17 @@ var serviceContext = (function () {
       currentPage.$vm.__call_hook('onHide');
     }
     if (tabBarPage) {
-      tabBarPage.$getAppWebview().show('none');
+      const webview = tabBarPage.$getAppWebview();
+      webview.show('none');
       // 等visible状态都切换完之后，再触发onShow，否则开发者在onShow里边 getCurrentPages 会不准确
-      callOnShow && tabBarPage.$vm.__call_hook('onShow');
+      if (callOnShow && !webview.__preload__) {
+        tabBarPage.$vm.__call_hook('onShow');
+      }
     } else {
       return showWebview(registerPage({
         url,
         path,
-        query: {},
+        query,
         openType: 'switchTab'
       }), 'none', 0, () => {
         setStatusBarStyle();
@@ -8528,14 +9019,55 @@ var serviceContext = (function () {
     from,
     openType
   }, callbackId) {
-    const path = url.split('?')[0];
+    // 直达时，允许 tabBar 带参数
+    const urls = url.split('?');
+    const path = urls[0];
+    const query = parseQuery(urls[1] || '');
     navigate(path, function () {
       _switchTab({
         url,
         path,
+        query,
         from
       }, callbackId);
     }, openType === 'appLaunch');
+  }
+
+  function unPreloadPage$1 ({
+    url
+  }) {
+    const webview = closePreloadWebview({
+      url
+    });
+    if (webview) {
+      return {
+        id: webview.id,
+        url,
+        errMsg: 'unPreloadPage:ok'
+      }
+    }
+    return {
+      url,
+      errMsg: 'unPreloadPage:fail not found'
+    }
+  }
+
+  function preloadPage$1 ({
+    url
+  }, callbackId) {
+    const urls = url.split('?');
+    const path = urls[0];
+    const query = parseQuery(urls[1] || '');
+    const webview = preloadWebview$1({
+      url,
+      path,
+      query
+    });
+    invoke$1(callbackId, {
+      id: webview.id,
+      url,
+      errMsg: 'preloadPage:ok'
+    });
   }
 
   const STORAGE_DATA_TYPE = '__TYPE';
@@ -8548,9 +9080,16 @@ var serviceContext = (function () {
       const type = object.type;
       if (types.indexOf(type) >= 0) {
         const keys = Object.keys(object);
-        // eslint-disable-next-line valid-typeof
-        if (keys.length === 2 && 'data' in object && typeof object.data === type) {
-          return object.data
+        if (keys.length === 2 && 'data' in object) {
+          // eslint-disable-next-line valid-typeof
+          if (typeof object.data === type) {
+            return object.data
+          }
+          // eslint-disable-next-line no-useless-escape
+          if (type === 'object' && /^\d{4}-\d{2}-\d{2}T\d{2}\:\d{2}\:\d{2}\.\d{3}Z$/.test(object.data)) {
+            // ISO 8601 格式返回 Date
+            return new Date(object.data)
+          }
         } else if (keys.length === 1) {
           return ''
         }
@@ -8622,8 +9161,12 @@ var serviceContext = (function () {
           data = object;
           if (typeof object === 'string') {
             object = JSON.parse(object);
-            // eslint-disable-next-line valid-typeof
-            data = typeof object === (type === 'null' ? 'object' : type) ? object : data;
+            const objectType = typeof object;
+            if (objectType === 'number' && type === 'date') {
+              data = new Date(object);
+            } else if (objectType === (['null', 'array'].indexOf(type) < 0 ? type : 'object')) {
+              data = object;
+            }
           }
         }
       } catch (error) {}
@@ -8815,17 +9358,16 @@ var serviceContext = (function () {
     }
   }
 
-  let waiting;
-  let waitingTimeout;
-  let toast = false;
-  let toastTimeout;
+  let toast;
+  let toastType;
+  let timeout;
 
   function showLoading$1 (args) {
-    return callApiSync(showToast$1, args, 'showToast', 'showLoading')
+    return callApiSync(showToast$1, Object.assign({}, args, { type: 'loading' }), 'showToast', 'showLoading')
   }
 
   function hideLoading () {
-    return callApiSync(hideToast, Object.create(null), 'hideToast', 'hideLoading')
+    return callApiSync(hide, 'loading', 'hide', 'hideLoading')
   }
 
   function showToast$1 ({
@@ -8834,43 +9376,18 @@ var serviceContext = (function () {
     image = '',
     duration = 1500,
     mask = false,
-    position = ''
+    position = '',
+    type = 'toast'
   } = {}) {
-    if (position) {
-      if (toast) {
-        toastTimeout && clearTimeout(toastTimeout);
-        plus.nativeUI.closeToast();
-      }
-      if (waiting) {
-        waitingTimeout && clearTimeout(waitingTimeout);
-        waiting.close();
-      }
-      if (~['top', 'center', 'bottom'].indexOf(position)) {
-        let richText = `<span>${title}</span>`;
-        plus.nativeUI.toast(richText, {
-          verticalAlign: position,
-          type: 'richtext'
-        });
-        toast = true;
-        toastTimeout = setTimeout(() => {
-          hideToast();
-        }, 2000);
-        return {
-          errMsg: 'showToast:ok'
-        }
-      }
-      console.warn('uni.showToast 传入的 "position" 值 "' + position + '" 无效');
-    }
-
-    if (duration) {
-      if (waiting) {
-        waitingTimeout && clearTimeout(waitingTimeout);
-        waiting.close();
-      }
-      if (toast) {
-        toastTimeout && clearTimeout(toastTimeout);
-        plus.nativeUI.closeToast();
-      }
+    hide(null);
+    toastType = type;
+    if (['top', 'center', 'bottom'].includes(position)) {
+      // 仅可以关闭 richtext 类型，但 iOS 部分情况换行显示有问题
+      plus.nativeUI.toast(title, {
+        verticalAlign: position
+      });
+      toast = true;
+    } else {
       if (icon && !~['success', 'loading', 'none'].indexOf(icon)) {
         icon = 'success';
       }
@@ -8904,35 +9421,42 @@ var serviceContext = (function () {
             height: '55px',
             icon: '__uniappsuccess.png',
             interval: duration
-
           };
         }
       }
 
-      waiting = plus.nativeUI.showWaiting(title, waitingOptions);
-      waitingTimeout = setTimeout(() => {
-        hideToast();
-      }, duration);
+      toast = plus.nativeUI.showWaiting(title, waitingOptions);
     }
+
+    timeout = setTimeout(() => {
+      hide(null);
+    }, duration);
     return {
       errMsg: 'showToast:ok'
     }
   }
 
   function hideToast () {
-    if (toast) {
-      toastTimeout && clearTimeout(toastTimeout);
+    return callApiSync(hide, 'toast', 'hide', 'hideToast')
+  }
+
+  function hide (type = 'toast') {
+    if (type && type !== toastType) {
+      return
+    }
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+    if (toast === true) {
       plus.nativeUI.closeToast();
-      toast = false;
+    } else if (toast && toast.close) {
+      toast.close();
     }
-    if (waiting) {
-      waitingTimeout && clearTimeout(waitingTimeout);
-      waiting.close();
-      waiting = null;
-      waitingTimeout = null;
-    }
+    toast = null;
+    toastType = null;
     return {
-      errMsg: 'hideToast:ok'
+      errMsg: 'hide:ok'
     }
   }
   function showModal$1 ({
@@ -8944,6 +9468,7 @@ var serviceContext = (function () {
     confirmText = '确定',
     confirmColor = '#3CC51F'
   } = {}, callbackId) {
+    content = content || ' ';
     plus.nativeUI.confirm(content, (e) => {
       if (showCancel) {
         invoke$1(callbackId, {
@@ -8976,9 +9501,7 @@ var serviceContext = (function () {
       options.title = title;
     }
 
-    if (plus.os.name === 'iOS') {
-      options.cancel = '取消';
-    }
+    options.cancel = '';
 
     plus.nativeUI.actionSheet(Object.assign(options, { popover }), (e) => {
       if (e.index > 0) {
@@ -9051,49 +9574,39 @@ var serviceContext = (function () {
     index,
     text,
     iconPath,
-    selectedIconPath
+    selectedIconPath,
+    pagePath
   }) {
-    if (!isTabBarPage()) {
-      return {
-        errMsg: 'setTabBarItem:fail not TabBar page'
+    tabBar$1.setTabBarItem(index, text, iconPath, selectedIconPath);
+    const route = pagePath && __uniRoutes.find(({ path }) => path === pagePath);
+    if (route) {
+      const meta = route.meta;
+      meta.isTabBar = true;
+      meta.tabBarIndex = index;
+      meta.isQuit = true;
+      const tabBar = __uniConfig.tabBar;
+      if (tabBar && tabBar.list && tabBar.list[index]) {
+        tabBar.list[index].pagePath = pagePath.startsWith('/') ? pagePath.substring(1) : pagePath;
       }
     }
-    tabBar$1.setTabBarItem(index, text, iconPath, selectedIconPath);
     return {
       errMsg: 'setTabBarItem:ok'
     }
   }
 
-  function setTabBarStyle$2 ({
-    color,
-    selectedColor,
-    backgroundColor,
-    borderStyle
-  }) {
+  function setTabBarStyle$2 (style = {}) {
     if (!isTabBarPage()) {
       return {
         errMsg: 'setTabBarStyle:fail not TabBar page'
       }
     }
-    const style = {};
     const borderStyles = {
       black: 'rgba(0,0,0,0.4)',
       white: 'rgba(255,255,255,0.4)'
     };
-    if (color) {
-      style.color = color;
-    }
-    if (selectedColor) {
-      style.selectedColor = selectedColor;
-    }
-    if (backgroundColor) {
-      style.backgroundColor = backgroundColor;
-    }
+    const borderStyle = style.borderStyle;
     if (borderStyle in borderStyles) {
-      borderStyle = borderStyles[borderStyle];
-    }
-    if (borderStyle) {
-      style.borderStyle = borderStyle;
+      style.borderStyle = borderStyles[borderStyle];
     }
     tabBar$1.setTabBarStyle(style);
     return {
@@ -9183,14 +9696,14 @@ var serviceContext = (function () {
   }
 
   function findAttrs (ids, elm, result) {
-    let nodes = elm.children;
+    const nodes = elm.children;
     if (!Array.isArray(nodes)) {
       return false
     }
     for (let i = 0; i < nodes.length; i++) {
-      let node = nodes[i];
+      const node = nodes[i];
       if (node.attr) {
-        let index = ids.indexOf(node.attr.id);
+        const index = ids.indexOf(node.attr.id);
         if (index >= 0) {
           result[index] = {
             id: ids[index],
@@ -9209,7 +9722,7 @@ var serviceContext = (function () {
   }
 
   function getSelectors (queue) {
-    let ids = [];
+    const ids = [];
     for (let i = 0; i < queue.length; i++) {
       const selector = queue[i].selector;
       if (selector.indexOf('#') === 0) {
@@ -9238,7 +9751,7 @@ var serviceContext = (function () {
     // TODO 重构，逻辑不对，queue 里的每一项可能有单独的作用域查找（即 component）
     const dom = pageVm._$weex.requireModule('dom');
     const selectors = getSelectors(queue);
-    let outAttrs = new Array(selectors.length);
+    const outAttrs = new Array(selectors.length);
     findAttrs(selectors, pageVm.$el, outAttrs);
     getComponentRectAll(dom, outAttrs, 0, [], (result) => {
       callback(result);
@@ -9254,17 +9767,17 @@ var serviceContext = (function () {
   const eventNames = [
     'load',
     'close',
+    'verify',
     'error'
   ];
 
   const ERROR_CODE_LIST = [-5001, -5002, -5003, -5004, -5005, -5006];
+  const EXPIRED_TIME = 1000 * 60 * 30;
+  const EXPIRED_TEXT = { code: -5008, errMsg: '广告数据已过期，请重新加载' };
+  const ProviderType = { CSJ: 'csj', GDT: 'gdt' };
 
   class RewardedVideoAd {
-    constructor (adpid) {
-      this._options = {
-        adpid: adpid
-      };
-
+    constructor (options = {}) {
       const _callbacks = this._callbacks = {};
       eventNames.forEach(item => {
         _callbacks[item] = [];
@@ -9274,35 +9787,57 @@ var serviceContext = (function () {
         };
       });
 
+      this._preload = options.preload !== undefined ? options.preload : true;
       this._isLoad = false;
       this._adError = '';
       this._loadPromiseResolve = null;
       this._loadPromiseReject = null;
-      const rewardAd = this._rewardAd = plus.ad.createRewardedVideoAd(this._options);
+      this._lastLoadTime = 0;
+
+      const rewardAd = this._rewardAd = plus.ad.createRewardedVideoAd(options);
       rewardAd.onLoad((e) => {
         this._isLoad = true;
+        this._lastLoadTime = Date.now();
         this._dispatchEvent('load', {});
+
         if (this._loadPromiseResolve != null) {
           this._loadPromiseResolve();
           this._loadPromiseResolve = null;
         }
       });
       rewardAd.onClose((e) => {
-        this._loadAd();
+        if (this._preload) {
+          this._loadAd();
+        }
         this._dispatchEvent('close', { isEnded: e.isEnded });
+      });
+      rewardAd.onVerify && rewardAd.onVerify((e) => {
+        this._dispatchEvent('verify', { isValid: e.isValid });
       });
       rewardAd.onError((e) => {
         const { code, message } = e;
         const data = { code: code, errMsg: message };
         this._adError = message;
+        if (code === -5008) {
+          this._isLoad = false;
+        }
         this._dispatchEvent('error', data);
+        // TODO
         if ((code === -5005 || ERROR_CODE_LIST.index(code) === -1) && this._loadPromiseReject != null) {
           this._loadPromiseReject(data);
           this._loadPromiseReject = null;
         }
       });
-      this._loadAd();
+
+      if (this._preload) {
+        this._loadAd();
+      }
     }
+
+    get isExpired () {
+      return (this._lastLoadTime !== 0 && (Math.abs(Date.now() - this._lastLoadTime) > EXPIRED_TIME))
+    }
+
     load () {
       return new Promise((resolve, reject) => {
         if (this._isLoad) {
@@ -9314,8 +9849,18 @@ var serviceContext = (function () {
         this._loadAd();
       })
     }
+
     show () {
       return new Promise((resolve, reject) => {
+        const provider = this.getProvider();
+        if (provider === ProviderType.CSJ && this.isExpired) {
+          this._isLoad = false;
+          // TODO
+          this._dispatchEvent('error', EXPIRED_TEXT);
+          reject(new Error(EXPIRED_TEXT.errMsg));
+          return
+        }
+
         if (this._isLoad) {
           this._rewardAd.show();
           resolve();
@@ -9324,10 +9869,20 @@ var serviceContext = (function () {
         }
       })
     }
+
+    getProvider () {
+      return this._rewardAd.getProvider()
+    }
+
+    destroy () {
+      this._rewardAd.destroy();
+    }
+
     _loadAd () {
       this._isLoad = false;
       this._rewardAd.load();
     }
+
     _dispatchEvent (name, data) {
       this._callbacks[name].forEach(callback => {
         if (typeof callback === 'function') {
@@ -9337,13 +9892,9 @@ var serviceContext = (function () {
     }
   }
 
-  function createRewardedVideoAd ({
-    adpid = ''
-  } = {}) {
-    return new RewardedVideoAd(adpid)
+  function createRewardedVideoAd (options) {
+    return new RewardedVideoAd(options)
   }
-
-
 
   var api = /*#__PURE__*/Object.freeze({
     __proto__: null,
@@ -9363,12 +9914,15 @@ var serviceContext = (function () {
     setBackgroundAudioState: setBackgroundAudioState,
     operateBackgroundAudio: operateBackgroundAudio,
     getBackgroundAudioState: getBackgroundAudioState,
-    base64ToTempFilePath: base64ToTempFilePath,
     operateMapPlayer: operateMapPlayer$2,
     operateVideoPlayer: operateVideoPlayer$2,
     createLivePusherContext: createLivePusherContext$1,
     enableAccelerometer: enableAccelerometer,
     addPhoneContact: addPhoneContact,
+    onBluetoothDeviceFound: onBluetoothDeviceFound,
+    onBluetoothAdapterStateChange: onBluetoothAdapterStateChange,
+    onBLEConnectionStateChange: onBLEConnectionStateChange,
+    onBLECharacteristicValueChange: onBLECharacteristicValueChange,
     openBluetoothAdapter: openBluetoothAdapter,
     closeBluetoothAdapter: closeBluetoothAdapter,
     getBluetoothAdapterState: getBluetoothAdapterState,
@@ -9381,9 +9935,10 @@ var serviceContext = (function () {
     getBLEDeviceServices: getBLEDeviceServices,
     getBLEDeviceCharacteristics: getBLEDeviceCharacteristics,
     notifyBLECharacteristicValueChange: notifyBLECharacteristicValueChange,
-    notifyBLECharacteristicValueChanged: notifyBLECharacteristicValueChanged,
     readBLECharacteristicValue: readBLECharacteristicValue,
     writeBLECharacteristicValue: writeBLECharacteristicValue,
+    setBLEMTU: setBLEMTU,
+    getBLEDeviceRSSI: getBLEDeviceRSSI,
     getScreenBrightness: getScreenBrightness,
     setScreenBrightness: setScreenBrightness,
     setKeepScreenOn: setKeepScreenOn,
@@ -9397,7 +9952,7 @@ var serviceContext = (function () {
     startBeaconDiscovery: startBeaconDiscovery,
     stopBeaconDiscovery: stopBeaconDiscovery,
     makePhoneCall: makePhoneCall$1,
-    scanCode: scanCode$2,
+    scanCode: scanCode$3,
     checkIsSupportSoterAuthentication: checkIsSupportSoterAuthentication,
     checkIsSoterEnrolledInDevice: checkIsSoterEnrolledInDevice,
     startSoterAuthentication: startSoterAuthentication,
@@ -9405,11 +9960,11 @@ var serviceContext = (function () {
     getSystemInfo: getSystemInfo,
     vibrateLong: vibrateLong,
     vibrateShort: vibrateShort,
-    saveFile: saveFile,
+    saveFile: saveFile$1,
     getSavedFileList: getSavedFileList,
-    getFileInfo: getFileInfo,
-    getSavedFileInfo: getSavedFileInfo,
-    removeSavedFile: removeSavedFile,
+    getFileInfo: getFileInfo$1,
+    getSavedFileInfo: getSavedFileInfo$1,
+    removeSavedFile: removeSavedFile$1,
     openDocument: openDocument$1,
     chooseLocation: chooseLocation$3,
     getLocation: getLocation$1,
@@ -9421,11 +9976,11 @@ var serviceContext = (function () {
     stopVoice: stopVoice,
     chooseImage: chooseImage$1,
     chooseVideo: chooseVideo$1,
-    compressImage: compressImage,
+    compressImage: compressImage$1,
     getImageInfo: getImageInfo$1,
     previewImagePlus: previewImagePlus,
     operateRecorder: operateRecorder,
-    saveImageToPhotosAlbum: saveImageToPhotosAlbum,
+    saveImageToPhotosAlbum: saveImageToPhotosAlbum$1,
     saveVideoToPhotosAlbum: saveVideoToPhotosAlbum,
     operateDownloadTask: operateDownloadTask,
     createDownloadTask: createDownloadTask,
@@ -9453,13 +10008,15 @@ var serviceContext = (function () {
     getSubNVueById: getSubNVueById,
     getCurrentSubNVue: getCurrentSubNVue,
     onNativeEventReceive: onNativeEventReceive,
-    consumeNativeEvent: consumeNativeEvent,
     sendNativeEvent: sendNativeEvent,
+    loadSubPackage: loadSubPackage$2,
     navigateBack: navigateBack$1,
     navigateTo: navigateTo$1,
     reLaunch: reLaunch$1,
     redirectTo: redirectTo$1,
     switchTab: switchTab$1,
+    unPreloadPage: unPreloadPage$1,
+    preloadPage: preloadPage$1,
     setStorage: setStorage$1,
     setStorageSync: setStorageSync$1,
     getStorage: getStorage$1,
@@ -9480,6 +10037,7 @@ var serviceContext = (function () {
     hideLoading: hideLoading,
     showToast: showToast$1,
     hideToast: hideToast,
+    hide: hide,
     showModal: showModal$1,
     showActionSheet: showActionSheet$1,
     setTabBarBadge: setTabBarBadge$2,
@@ -9531,201 +10089,17 @@ var serviceContext = (function () {
     'stop',
     'ended',
     'timeUpdate',
-    'error',
-    'waiting',
-    'seeking',
-    'seeked'
-  ];
-
-  const props = [
-    {
-      name: 'src',
-      cache: true
-    },
-    {
-      name: 'startTime',
-      default: 0,
-      cache: true
-    },
-    {
-      name: 'autoplay',
-      default: false,
-      cache: true
-    },
-    {
-      name: 'loop',
-      default: false,
-      cache: true
-    },
-    {
-      name: 'obeyMuteSwitch',
-      default: true,
-      readonly: true,
-      cache: true
-    },
-    {
-      name: 'duration',
-      readonly: true
-    },
-    {
-      name: 'currentTime',
-      readonly: true
-    },
-    {
-      name: 'paused',
-      readonly: true
-    },
-    {
-      name: 'buffered',
-      readonly: true
-    },
-    {
-      name: 'volume'
-    }
-  ];
-
-  class InnerAudioContext {
-    constructor (id) {
-      this.id = id;
-      this._callbacks = {};
-      this._options = {};
-      eventNames$1.forEach(name => {
-        this._callbacks[name.toLowerCase()] = [];
-      });
-      props.forEach(item => {
-        const name = item.name;
-        const data = {
-          get () {
-            const result = item.cache ? this._options : invokeMethod('getAudioState', {
-              audioId: this.id
-            });
-            const value = name in result ? result[name] : item.default;
-            return typeof value === 'number' && name !== 'volume' ? value / 1e3 : value
-          }
-        };
-        if (!item.readonly) {
-          data.set = function (value) {
-            this._options[name] = value;
-            invokeMethod('setAudioState', Object.assign({}, this._options, {
-              audioId: this.id
-            }));
-          };
-        }
-        Object.defineProperty(this, name, data);
-      });
-    }
-    play () {
-      this._operate('play');
-    }
-    pause () {
-      this._operate('pause');
-    }
-    stop () {
-      this._operate('stop');
-    }
-    seek (position) {
-      this._operate('seek', {
-        currentTime: position * 1e3
-      });
-    }
-    destroy () {
-      clearInterval(this.__timing);
-      invokeMethod('destroyAudioInstance', {
-        audioId: this.id
-      });
-      delete innerAudioContexts[this.id];
-    }
-    _operate (type, options) {
-      invokeMethod('operateAudio', Object.assign({}, options, {
-        audioId: this.id,
-        operationType: type
-      }));
-    }
-  }
-
-  eventNames$1.forEach(item => {
-    const name = item[0].toUpperCase() + item.substr(1);
-    item = item.toLowerCase();
-    InnerAudioContext.prototype[`on${name}`] = function (callback) {
-      this._callbacks[item].push(callback);
-    };
-    InnerAudioContext.prototype[`off${name}`] = function (callback) {
-      const callbacks = this._callbacks[item];
-      const index = callbacks.indexOf(callback);
-      if (index >= 0) {
-        callbacks.splice(index, 1);
-      }
-    };
-  });
-
-  function emit (audio, state, errMsg, errCode) {
-    audio._callbacks[state].forEach(callback => {
-      if (typeof callback === 'function') {
-        callback(state === 'error' ? {
-          errMsg,
-          errCode
-        } : {});
-      }
-    });
-  }
-
-  onMethod('onAudioStateChange', ({
-    state,
-    audioId,
-    errMsg,
-    errCode
-  }) => {
-    const audio = innerAudioContexts[audioId];
-    if (audio) {
-      emit(audio, state, errMsg, errCode);
-      if (state === 'play') {
-        const oldCurrentTime = audio.currentTime;
-        audio.__timing = setInterval(() => {
-          const currentTime = audio.currentTime;
-          if (currentTime !== oldCurrentTime) {
-            emit(audio, 'timeupdate');
-          }
-        }, 200);
-      } else if (state === 'pause' || state === 'stop' || state === 'error') {
-        clearInterval(audio.__timing);
-      }
-    }
-  });
-
-  const innerAudioContexts = Object.create(null);
-
-  function createInnerAudioContext () {
-    const {
-      audioId
-    } = invokeMethod('createAudioInstance');
-    const innerAudioContext = new InnerAudioContext(audioId);
-    innerAudioContexts[audioId] = innerAudioContext;
-    return innerAudioContext
-  }
-
-  var require_context_module_1_4 = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    createInnerAudioContext: createInnerAudioContext
-  });
-
-  const eventNames$2 = [
-    'canplay',
-    'play',
-    'pause',
-    'stop',
-    'ended',
-    'timeUpdate',
     'prev',
     'next',
     'error',
     'waiting'
   ];
   const callbacks$5 = {};
-  eventNames$2.forEach(name => {
+  eventNames$1.forEach(name => {
     callbacks$5[name] = [];
   });
 
-  const props$1 = [
+  const props = [
     {
       name: 'duration',
       readonly: true
@@ -9795,7 +10169,7 @@ var serviceContext = (function () {
           }
         });
       });
-      props$1.forEach(item => {
+      props.forEach(item => {
         const name = item.name;
         const data = {
           get () {
@@ -9814,20 +10188,25 @@ var serviceContext = (function () {
         Object.defineProperty(this, name, data);
       });
     }
+
     play () {
       this._operate('play');
     }
+
     pause () {
       this._operate('pause');
     }
+
     stop () {
       this._operate('stop');
     }
+
     seek (position) {
       this._operate('seek', {
         currentTime: position
       });
     }
+
     _operate (type, options) {
       invokeMethod('operateBackgroundAudio', Object.assign({}, options, {
         operationType: type
@@ -9835,7 +10214,7 @@ var serviceContext = (function () {
     }
   }
 
-  eventNames$2.forEach(item => {
+  eventNames$1.forEach(item => {
     const name = item[0].toUpperCase() + item.substr(1);
     BackgroundAudioManager.prototype[`on${name}`] = function (callback) {
       callbacks$5[item].push(callback);
@@ -9854,16 +10233,6 @@ var serviceContext = (function () {
   });
 
   const canvasEventCallbacks = createCallbacks('canvasEvent');
-
-  UniServiceJSBridge.subscribe('onDrawCanvas', ({
-    callbackId,
-    data
-  }) => {
-    const callback = canvasEventCallbacks.pop(callbackId);
-    if (callback) {
-      callback(data);
-    }
-  });
 
   UniServiceJSBridge.subscribe('onCanvasMethodCallback', ({
     callbackId,
@@ -10040,9 +10409,9 @@ var serviceContext = (function () {
     e = e || '#000000';
     var t = null;
     if ((t = /^#([0-9|A-F|a-f]{6})$/.exec(e)) != null) {
-      let n = parseInt(t[1].slice(0, 2), 16);
-      let o = parseInt(t[1].slice(2, 4), 16);
-      let r = parseInt(t[1].slice(4), 16);
+      const n = parseInt(t[1].slice(0, 2), 16);
+      const o = parseInt(t[1].slice(2, 4), 16);
+      const r = parseInt(t[1].slice(4), 16);
       return [n, o, r, 255]
     }
     if ((t = /^#([0-9|A-F|a-f]{3})$/.exec(e)) != null) {
@@ -10065,11 +10434,11 @@ var serviceContext = (function () {
       })
     }
     var i = e.toLowerCase();
-    if (predefinedColor.hasOwnProperty(i)) {
+    if (hasOwn(predefinedColor, i)) {
       t = /^#([0-9|A-F|a-f]{6,8})$/.exec(predefinedColor[i]);
-      let n = parseInt(t[1].slice(0, 2), 16);
-      let o = parseInt(t[1].slice(2, 4), 16);
-      let r = parseInt(t[1].slice(4, 6), 16);
+      const n = parseInt(t[1].slice(0, 2), 16);
+      const o = parseInt(t[1].slice(2, 4), 16);
+      const r = parseInt(t[1].slice(4, 6), 16);
       let a = parseInt(t[1].slice(6, 8), 16);
       a = a >= 0 ? a : 255;
       return [n, o, r, a]
@@ -10091,6 +10460,7 @@ var serviceContext = (function () {
       this.data = data;
       this.colorStop = [];
     }
+
     addColorStop (position, color) {
       this.colorStop.push([position, checkColor(color)]);
     }
@@ -10104,14 +10474,11 @@ var serviceContext = (function () {
     'setTextBaseline', 'setLineDash'
   ];
 
-  var tempCanvas;
-  function getTempCanvas (width = 0, height = 0) {
-    if (!tempCanvas) {
-      tempCanvas = document.createElement('canvas');
-    }
-    tempCanvas.width = width;
-    tempCanvas.height = height;
-    return tempCanvas
+  function measureText (text, font) {
+    const canvas = document.createElement('canvas');
+    const c2d = canvas.getContext('2d');
+    c2d.font = font;
+    return c2d.measureText(text).width || 0
   }
 
   function TextMetrics (width) {
@@ -10141,6 +10508,7 @@ var serviceContext = (function () {
         fontFamily: 'sans-serif'
       };
     }
+
     draw (reserve = false, callback) {
       var actions = [...this.actions];
       this.actions = [];
@@ -10157,31 +10525,38 @@ var serviceContext = (function () {
         callbackId
       });
     }
+
     createLinearGradient (x0, y0, x1, y1) {
       return new CanvasGradient('linear', [x0, y0, x1, y1])
     }
+
     createCircularGradient (x, y, r) {
       return new CanvasGradient('radial', [x, y, r])
     }
+
     createPattern (image, repetition) {
       if (undefined === repetition) {
         console.error("Failed to execute 'createPattern' on 'CanvasContext': 2 arguments required, but only 1 present.");
       } else if (['repeat', 'repeat-x', 'repeat-y', 'no-repeat'].indexOf(repetition) < 0) {
-        console.error("Failed to execute 'createPattern' on 'CanvasContext': The provided type ('" + repetition + "') is not one of 'repeat', 'no-repeat', 'repeat-x', or 'repeat-y'.");
+        console.error("Failed to execute 'createPattern' on 'CanvasContext': The provided type ('" + repetition +
+          "') is not one of 'repeat', 'no-repeat', 'repeat-x', or 'repeat-y'.");
       } else {
         return new Pattern(image, repetition)
       }
     }
-    // TODO
+
     measureText (text) {
-      if (typeof document === 'object') {
-        var c2d = getTempCanvas().getContext('2d');
-        c2d.font = this.state.font;
-        return new TextMetrics(c2d.measureText(text).width || 0)
-      } else {
-        return new TextMetrics(0)
+      const font = this.state.font;
+      let width = 0;
+      {
+        const webview = plus.webview.all().find(webview => webview.getURL().endsWith('www/__uniappview.html'));
+        if (webview) {
+          width = Number(webview.evalJSSync(`(${measureText.toString()})(${JSON.stringify(text)},${JSON.stringify(font)})`));
+        }
       }
+      return new TextMetrics(width)
     }
+
     save () {
       this.actions.push({
         method: 'save',
@@ -10189,6 +10564,7 @@ var serviceContext = (function () {
       });
       this.drawingState.push(this.state);
     }
+
     restore () {
       this.actions.push({
         method: 'restore',
@@ -10207,10 +10583,12 @@ var serviceContext = (function () {
         fontFamily: 'sans-serif'
       };
     }
+
     beginPath () {
       this.path = [];
       this.subpath = [];
     }
+
     moveTo (x, y) {
       this.path.push({
         method: 'moveTo',
@@ -10220,6 +10598,7 @@ var serviceContext = (function () {
         [x, y]
       ];
     }
+
     lineTo (x, y) {
       if (this.path.length === 0 && this.subpath.length === 0) {
         this.path.push({
@@ -10234,6 +10613,7 @@ var serviceContext = (function () {
       }
       this.subpath.push([x, y]);
     }
+
     quadraticCurveTo (cpx, cpy, x, y) {
       this.path.push({
         method: 'quadraticCurveTo',
@@ -10241,6 +10621,7 @@ var serviceContext = (function () {
       });
       this.subpath.push([x, y]);
     }
+
     bezierCurveTo (cp1x, cp1y, cp2x, cp2y, x, y) {
       this.path.push({
         method: 'bezierCurveTo',
@@ -10248,6 +10629,7 @@ var serviceContext = (function () {
       });
       this.subpath.push([x, y]);
     }
+
     arc (x, y, r, sAngle, eAngle, counterclockwise = false) {
       this.path.push({
         method: 'arc',
@@ -10255,6 +10637,7 @@ var serviceContext = (function () {
       });
       this.subpath.push([x, y]);
     }
+
     rect (x, y, width, height) {
       this.path.push({
         method: 'rect',
@@ -10264,6 +10647,7 @@ var serviceContext = (function () {
         [x, y]
       ];
     }
+
     arcTo (x1, y1, x2, y2, radius) {
       this.path.push({
         method: 'arcTo',
@@ -10271,12 +10655,14 @@ var serviceContext = (function () {
       });
       this.subpath.push([x2, y2]);
     }
+
     clip () {
       this.actions.push({
         method: 'clip',
         data: [...this.path]
       });
     }
+
     closePath () {
       this.path.push({
         method: 'closePath',
@@ -10286,52 +10672,61 @@ var serviceContext = (function () {
         this.subpath = [this.subpath.shift()];
       }
     }
+
     clearActions () {
       this.actions = [];
       this.path = [];
       this.subpath = [];
     }
+
     getActions () {
       var actions = [...this.actions];
       this.clearActions();
       return actions
     }
+
     set lineDashOffset (value) {
       this.actions.push({
         method: 'setLineDashOffset',
         data: [value]
       });
     }
+
     set globalCompositeOperation (type) {
       this.actions.push({
         method: 'setGlobalCompositeOperation',
         data: [type]
       });
     }
+
     set shadowBlur (level) {
       this.actions.push({
         method: 'setShadowBlur',
         data: [level]
       });
     }
+
     set shadowColor (color) {
       this.actions.push({
         method: 'setShadowColor',
         data: [color]
       });
     }
+
     set shadowOffsetX (x) {
       this.actions.push({
         method: 'setShadowOffsetX',
         data: [x]
       });
     }
+
     set shadowOffsetY (y) {
       this.actions.push({
         method: 'setShadowOffsetY',
         data: [y]
       });
     }
+
     set font (value) {
       var self = this;
       this.state.font = value;
@@ -10380,6 +10775,7 @@ var serviceContext = (function () {
       } else {
         console.warn("Failed to set 'font' on 'CanvasContext': invalid format.");
       }
+
       function pushAction () {
         actions.push({
           method: 'setFontWeight',
@@ -10388,15 +10784,19 @@ var serviceContext = (function () {
         self.state.fontWeight = 'normal';
       }
     }
+
     get font () {
       return this.state.font
     }
+
     set fillStyle (color) {
       this.setFillStyle(color);
     }
+
     set strokeStyle (color) {
       this.setStrokeStyle(color);
     }
+
     set globalAlpha (value) {
       value = Math.floor(255 * parseFloat(value));
       this.actions.push({
@@ -10404,36 +10804,42 @@ var serviceContext = (function () {
         data: [value]
       });
     }
+
     set textAlign (align) {
       this.actions.push({
         method: 'setTextAlign',
         data: [align]
       });
     }
+
     set lineCap (type) {
       this.actions.push({
         method: 'setLineCap',
         data: [type]
       });
     }
+
     set lineJoin (type) {
       this.actions.push({
         method: 'setLineJoin',
         data: [type]
       });
     }
+
     set lineWidth (value) {
       this.actions.push({
         method: 'setLineWidth',
         data: [value]
       });
     }
+
     set miterLimit (value) {
       this.actions.push({
         method: 'setMiterLimit',
         data: [value]
       });
     }
+
     set textBaseline (type) {
       this.actions.push({
         method: 'setTextBaseline',
@@ -10498,10 +10904,13 @@ var serviceContext = (function () {
               dHeight = undefined;
             }
             var data;
+
             function isNumber (e) {
               return typeof e === 'number'
             }
-            data = isNumber(dx) && isNumber(dy) && isNumber(dWidth) && isNumber(dHeight) ? [imageResource, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight] : isNumber(sWidth) && isNumber(
+            data = isNumber(dx) && isNumber(dy) && isNumber(dWidth) && isNumber(dHeight) ? [imageResource, sx, sy,
+              sWidth, sHeight, dx, dy, dWidth, dHeight
+            ] : isNumber(sWidth) && isNumber(
               sHeight) ? [imageResource, sx, sy, sWidth, sHeight] : [imageResource, sx, sy];
             this.actions.push({
               method,
@@ -10648,8 +11057,9 @@ var serviceContext = (function () {
     var cId = canvasEventCallbacks.push(function (data) {
       invoke$1(callbackId, data);
     });
+    // fix ...
     operateCanvas(canvasId, pageId, 'putImageData', {
-      data: [...data],
+      data: Array.prototype.slice.call(data),
       x,
       y,
       width,
@@ -10676,37 +11086,20 @@ var serviceContext = (function () {
       });
       return
     }
-    const cId = canvasEventCallbacks.push(function ({
-      base64
-    }) {
-      if (!base64 || !base64.length) {
-        invoke$1(callbackId, {
-          errMsg: 'canvasToTempFilePath:fail'
-        });
-      }
-      invokeMethod('base64ToTempFilePath', {
-        base64Data: base64,
-        x,
-        y,
-        width,
-        height,
-        destWidth,
-        destHeight,
-        canvasId,
-        fileType,
-        qualit
-      }, callbackId);
+    const cId = canvasEventCallbacks.push(function (res) {
+      invoke$1(callbackId, res);
     });
-    operateCanvas(canvasId, pageId, 'getDataUrl', {
+    const dirname = `${TEMP_PATH}/canvas`;
+    operateCanvas(canvasId, pageId, 'toTempFilePath', {
       x,
       y,
       width,
       height,
       destWidth,
       destHeight,
-      hidpi: false,
       fileType,
       qualit,
+      dirname,
       callbackId: cId
     });
   }
@@ -10731,21 +11124,19 @@ var serviceContext = (function () {
     callback.invoke(callbackId, data);
   });
 
-  const methods = ['getCenterLocation', 'getScale', 'getRegion', 'includePoints', 'translateMarker'];
+  const methods = ['getCenterLocation', 'moveToLocation', 'getScale', 'getRegion', 'includePoints', 'translateMarker'];
 
   class MapContext {
     constructor (id, pageVm) {
       this.id = id;
       this.pageVm = pageVm;
     }
-
-    moveToLocation () {
-      operateMapPlayer$3(this.id, this.pageVm, 'moveToLocation');
-    }
   }
 
   MapContext.prototype.$getAppMap = function () {
-    return plus.maps.getMapById(this.pageVm.$page.id + '-map-' + this.id)
+    {
+      return plus.maps.getMapById(this.pageVm.$page.id + '-map-' + this.id)
+    }
   };
 
   methods.forEach(function (method) {
@@ -10783,20 +11174,25 @@ var serviceContext = (function () {
     play () {
       operateVideoPlayer$3(this.id, this.pageVm, 'play');
     }
+
     pause () {
       operateVideoPlayer$3(this.id, this.pageVm, 'pause');
     }
+
     stop () {
       operateVideoPlayer$3(this.id, this.pageVm, 'stop');
     }
+
     seek (position) {
       operateVideoPlayer$3(this.id, this.pageVm, 'seek', {
         position
       });
     }
+
     sendDanmu (args) {
       operateVideoPlayer$3(this.id, this.pageVm, 'sendDanmu', args);
     }
+
     playbackRate (rate) {
       if (!~RATES.indexOf(rate)) {
         rate = 1.0;
@@ -10805,15 +11201,19 @@ var serviceContext = (function () {
         rate
       });
     }
+
     requestFullScreen (args = {}) {
       operateVideoPlayer$3(this.id, this.pageVm, 'requestFullScreen', args);
     }
+
     exitFullScreen () {
       operateVideoPlayer$3(this.id, this.pageVm, 'exitFullScreen');
     }
+
     showStatusBar () {
       operateVideoPlayer$3(this.id, this.pageVm, 'showStatusBar');
     }
+
     hideStatusBar () {
       operateVideoPlayer$3(this.id, this.pageVm, 'hideStatusBar');
     }
@@ -10854,6 +11254,7 @@ var serviceContext = (function () {
       this.id = id;
       this.pageId = pageId;
     }
+
     format (name, value) {
       operateEditor(this.id, this.pageId, 'format', {
         options: {
@@ -10876,6 +11277,196 @@ var serviceContext = (function () {
   var require_context_module_1_9 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     EditorContext: EditorContext
+  });
+
+  const eventNames$2 = [
+    'canplay',
+    'play',
+    'pause',
+    'stop',
+    'ended',
+    'timeUpdate',
+    'error',
+    'waiting',
+    'seeking',
+    'seeked'
+  ];
+
+  const props$1 = [
+    {
+      name: 'src',
+      cache: true
+    },
+    {
+      name: 'startTime',
+      default: 0,
+      cache: true
+    },
+    {
+      name: 'autoplay',
+      default: false,
+      cache: true
+    },
+    {
+      name: 'loop',
+      default: false,
+      cache: true
+    },
+    {
+      name: 'obeyMuteSwitch',
+      default: true,
+      readonly: true,
+      cache: true
+    },
+    {
+      name: 'duration',
+      readonly: true
+    },
+    {
+      name: 'currentTime',
+      readonly: true
+    },
+    {
+      name: 'paused',
+      readonly: true
+    },
+    {
+      name: 'buffered',
+      readonly: true
+    },
+    {
+      name: 'volume'
+    }
+  ];
+
+  class InnerAudioContext {
+    constructor (id) {
+      this.id = id;
+      this._callbacks = {};
+      this._options = {};
+      eventNames$2.forEach(name => {
+        this._callbacks[name.toLowerCase()] = [];
+      });
+      props$1.forEach(item => {
+        const name = item.name;
+        const data = {
+          get () {
+            const result = item.cache ? this._options : invokeMethod('getAudioState', {
+              audioId: this.id
+            });
+            const value = name in result ? result[name] : item.default;
+            return typeof value === 'number' && name !== 'volume' ? value / 1e3 : value
+          }
+        };
+        if (!item.readonly) {
+          data.set = function (value) {
+            this._options[name] = value;
+            invokeMethod('setAudioState', Object.assign({}, this._options, {
+              audioId: this.id
+            }));
+          };
+        }
+        Object.defineProperty(this, name, data);
+      });
+    }
+
+    play () {
+      this._operate('play');
+    }
+
+    pause () {
+      this._operate('pause');
+    }
+
+    stop () {
+      this._operate('stop');
+    }
+
+    seek (position) {
+      this._operate('seek', {
+        currentTime: position * 1e3
+      });
+    }
+
+    destroy () {
+      clearInterval(this.__timing);
+      invokeMethod('destroyAudioInstance', {
+        audioId: this.id
+      });
+      delete innerAudioContexts[this.id];
+    }
+
+    _operate (type, options) {
+      invokeMethod('operateAudio', Object.assign({}, options, {
+        audioId: this.id,
+        operationType: type
+      }));
+    }
+  }
+
+  eventNames$2.forEach(item => {
+    const name = item[0].toUpperCase() + item.substr(1);
+    item = item.toLowerCase();
+    InnerAudioContext.prototype[`on${name}`] = function (callback) {
+      this._callbacks[item].push(callback);
+    };
+    InnerAudioContext.prototype[`off${name}`] = function (callback) {
+      const callbacks = this._callbacks[item];
+      const index = callbacks.indexOf(callback);
+      if (index >= 0) {
+        callbacks.splice(index, 1);
+      }
+    };
+  });
+
+  function emit (audio, state, errMsg, errCode) {
+    audio._callbacks[state].forEach(callback => {
+      if (typeof callback === 'function') {
+        callback(state === 'error' ? {
+          errMsg,
+          errCode
+        } : {});
+      }
+    });
+  }
+
+  onMethod('onAudioStateChange', ({
+    state,
+    audioId,
+    errMsg,
+    errCode
+  }) => {
+    const audio = innerAudioContexts[audioId];
+    if (audio) {
+      emit(audio, state, errMsg, errCode);
+      if (state === 'play') {
+        const oldCurrentTime = audio.currentTime;
+        audio.__timing = setInterval(() => {
+          const currentTime = audio.currentTime;
+          if (currentTime !== oldCurrentTime) {
+            emit(audio, 'timeupdate');
+          }
+        }, 200);
+      } else if (state === 'pause' || state === 'stop' || state === 'error') {
+        clearInterval(audio.__timing);
+      }
+    }
+  });
+
+  const innerAudioContexts = Object.create(null);
+
+  function createInnerAudioContext () {
+    const {
+      audioId
+    } = invokeMethod('createAudioInstance');
+    const innerAudioContext = new InnerAudioContext(audioId);
+    innerAudioContexts[audioId] = innerAudioContext;
+    return innerAudioContext
+  }
+
+  var require_context_module_1_10 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    createInnerAudioContext: createInnerAudioContext
   });
 
   const callbacks$6 = [];
@@ -10918,36 +11509,11 @@ var serviceContext = (function () {
     })
   }
 
-  var require_context_module_1_10 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_11 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     onAccelerometerChange: onAccelerometerChange,
     startAccelerometer: startAccelerometer,
     stopAccelerometer: stopAccelerometer
-  });
-
-  function on (method) {
-    const callbacks = [];
-    onMethod(method, data => {
-      callbacks.forEach(callbackId => {
-        invoke$1(callbackId, data);
-      });
-    });
-    return function (callbackId) {
-      callbacks.push(callbackId);
-    }
-  }
-
-  const onBluetoothDeviceFound$1 = on('onBluetoothDeviceFound');
-  const onBluetoothAdapterStateChange$1 = on('onBluetoothAdapterStateChange');
-  const onBLEConnectionStateChange$1 = on('onBLEConnectionStateChange');
-  const onBLECharacteristicValueChange$1 = on('onBLECharacteristicValueChange');
-
-  var require_context_module_1_11 = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    onBluetoothDeviceFound: onBluetoothDeviceFound$1,
-    onBluetoothAdapterStateChange: onBluetoothAdapterStateChange$1,
-    onBLEConnectionStateChange: onBLEConnectionStateChange$1,
-    onBLECharacteristicValueChange: onBLECharacteristicValueChange$1
   });
 
   const callbacks$7 = [];
@@ -11016,6 +11582,17 @@ var serviceContext = (function () {
 
   const callbacks$9 = [];
 
+  onMethod('onThemeChange', function (res) {
+    callbacks$9.forEach(callbackId => {
+      invoke$1(callbackId, res);
+    });
+  });
+
+  function onThemeChange (callbackId) {
+    callbacks$9.push(callbackId);
+  }
+
+  // 旧版本 API，后期文档更新后考虑移除
   onMethod('onUIStyleChange', function (res) {
     callbacks$9.forEach(callbackId => {
       invoke$1(callbackId, res);
@@ -11024,11 +11601,58 @@ var serviceContext = (function () {
 
   function onUIStyleChange (callbackId) {
     callbacks$9.push(callbackId);
+    console.log('API uni.onUIStyleChange 已过时，请使用 uni.onThemeChange，详情：https://uniapp.dcloud.net.cn/api/system/theme');
   }
 
   var require_context_module_1_14 = /*#__PURE__*/Object.freeze({
     __proto__: null,
+    onThemeChange: onThemeChange,
     onUIStyleChange: onUIStyleChange
+  });
+
+  const getSelectedTextRangeEventCallbacks = createCallbacks('getSelectedTextRangeEvent');
+
+  UniServiceJSBridge.subscribe('onGetSelectedTextRange', ({
+    callbackId,
+    data
+  }) => {
+    console.log('onGetSelectedTextRange');
+    const callback = getSelectedTextRangeEventCallbacks.pop(callbackId);
+    if (callback) {
+      callback(data);
+    }
+  });
+
+  function getSelectedTextRange (_, callbackId) {
+    const pageId = getCurrentPageId();
+    UniServiceJSBridge.publishHandler('getSelectedTextRange', {
+      pageId,
+      callbackId: getSelectedTextRangeEventCallbacks.push(function (res) {
+        invoke$1(callbackId, res);
+      })
+    }, pageId);
+  }
+
+  var require_context_module_1_15 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    getSelectedTextRange: getSelectedTextRange
+  });
+
+  let callback$1;
+
+  onMethod('onKeyboardHeightChange', res => {
+    if (callback$1) {
+      invoke$1(callback$1, res);
+    }
+  });
+
+  function onKeyboardHeightChange (callbackId) {
+    callback$1 = callbackId;
+  }
+
+  var require_context_module_1_16 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    onKeyboardHeightChange: onKeyboardHeightChange
   });
 
   const longPressActionsCallbackId = 'longPressActionsCallback';
@@ -11054,17 +11678,17 @@ var serviceContext = (function () {
     return invokeMethod('previewImagePlus', args)
   }
 
-  var require_context_module_1_15 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_17 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     previewImage: previewImage$1
   });
 
   const callbacks$a = {
-    pause: [],
-    resume: [],
-    start: [],
-    stop: [],
-    error: []
+    pause: null,
+    resume: null,
+    start: null,
+    stop: null,
+    error: null
   };
 
   class RecorderManager {
@@ -11073,52 +11697,62 @@ var serviceContext = (function () {
         const state = res.state;
         delete res.state;
         delete res.errMsg;
-        callbacks$a[state].forEach(callback => {
-          if (typeof callback === 'function') {
-            callback(res);
-          }
-        });
+        if (typeof callbacks$a[state] === 'function') {
+          callbacks$a[state](res);
+        }
       });
     }
+
     onError (callback) {
-      callbacks$a.error.push(callback);
+      callbacks$a.error = callback;
     }
+
     onFrameRecorded (callback) {
 
     }
+
     onInterruptionBegin (callback) {
 
     }
+
     onInterruptionEnd (callback) {
 
     }
+
     onPause (callback) {
-      callbacks$a.pause.push(callback);
+      callbacks$a.pause = callback;
     }
+
     onResume (callback) {
-      callbacks$a.resume.push(callback);
+      callbacks$a.resume = callback;
     }
+
     onStart (callback) {
-      callbacks$a.start.push(callback);
+      callbacks$a.start = callback;
     }
+
     onStop (callback) {
-      callbacks$a.stop.push(callback);
+      callbacks$a.stop = callback;
     }
+
     pause () {
       invokeMethod('operateRecorder', {
         operationType: 'pause'
       });
     }
+
     resume () {
       invokeMethod('operateRecorder', {
         operationType: 'resume'
       });
     }
+
     start (options) {
       invokeMethod('operateRecorder', Object.assign({}, options, {
         operationType: 'start'
       }));
     }
+
     stop () {
       invokeMethod('operateRecorder', {
         operationType: 'stop'
@@ -11132,7 +11766,7 @@ var serviceContext = (function () {
     return recorderManager || (recorderManager = new RecorderManager())
   }
 
-  var require_context_module_1_16 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_18 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     getRecorderManager: getRecorderManager
   });
@@ -11143,27 +11777,32 @@ var serviceContext = (function () {
       this._callbackId = callbackId;
       this._callbacks = [];
     }
+
     abort () {
-      invokeMethod('operateRequestTask', {
+      invokeMethod('operateDownloadTask', {
         downloadTaskId: this.id,
         operationType: 'abort'
       });
     }
+
     onProgressUpdate (callback) {
       if (typeof callback !== 'function') {
         return
       }
       this._callbacks.push(callback);
     }
+
     onHeadersReceived () {
 
     }
+
     offProgressUpdate (callback) {
       const index = this._callbacks.indexOf(callback);
       if (index >= 0) {
         this._callbacks.splice(index, 1);
       }
     }
+
     offHeadersReceived () {
 
     }
@@ -11221,7 +11860,7 @@ var serviceContext = (function () {
     return task
   }
 
-  var require_context_module_1_17 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_19 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     downloadFile: downloadFile$1
   });
@@ -11265,7 +11904,8 @@ var serviceContext = (function () {
     data,
     statusCode,
     header,
-    errMsg
+    errMsg,
+    cookies
   }) {
     const {
       args,
@@ -11282,7 +11922,8 @@ var serviceContext = (function () {
           data,
           statusCode,
           header,
-          errMsg: 'request:ok'
+          errMsg: 'request:ok',
+          cookies
         }, args));
         break
       case 'fail':
@@ -11337,7 +11978,7 @@ var serviceContext = (function () {
     return new RequestTask(requestTaskId)
   }
 
-  var require_context_module_1_18 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_20 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     request: request$1
   });
@@ -11357,6 +11998,7 @@ var serviceContext = (function () {
       this.OPEN = 1;
       this.readyState = this.CLOSED;
     }
+
     send (args) {
       if (this.readyState !== this.OPEN) {
         this._callback(args, 'sendSocketMessage:fail WebSocket is not connected');
@@ -11369,6 +12011,7 @@ var serviceContext = (function () {
       }));
       this._callback(args, errMsg.replace('operateSocketTask', 'sendSocketMessage'));
     }
+
     close (args) {
       this.readyState = this.CLOSING;
       const {
@@ -11379,23 +12022,28 @@ var serviceContext = (function () {
       }));
       this._callback(args, errMsg.replace('operateSocketTask', 'closeSocket'));
     }
+
     onOpen (callback) {
       this._callbacks.open.push(callback);
     }
+
     onClose (callback) {
       this._callbacks.close.push(callback);
     }
+
     onError (callback) {
       this._callbacks.error.push(callback);
     }
+
     onMessage (callback) {
       this._callbacks.message.push(callback);
     }
+
     _callback ({
       success,
       fail,
       complete
-    }, errMsg) {
+    } = {}, errMsg) {
       var data = {
         errMsg
       };
@@ -11512,7 +12160,7 @@ var serviceContext = (function () {
     callbacks$b.close = callbackId;
   }
 
-  var require_context_module_1_19 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_21 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     connectSocket: connectSocket$1,
     sendSocketMessage: sendSocketMessage$1,
@@ -11523,33 +12171,67 @@ var serviceContext = (function () {
     onSocketClose: onSocketClose
   });
 
+  class UpdateManager {
+    onCheckForUpdate () {
+
+    }
+
+    onUpdateReady () {
+
+    }
+
+    onUpdateFailed () {
+
+    }
+
+    applyUpdate () {
+
+    }
+  }
+
+  let updateManager;
+
+  function getUpdateManager () {
+    return updateManager || (updateManager = new UpdateManager())
+  }
+
+  var require_context_module_1_22 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    getUpdateManager: getUpdateManager
+  });
+
   class UploadTask {
     constructor (uploadTaskId, callbackId) {
       this.id = uploadTaskId;
       this._callbackId = callbackId;
       this._callbacks = [];
     }
+
     abort () {
-      invokeMethod('operateRequestTask', {
+      invokeMethod('operateUploadTask', {
         uploadTaskId: this.id,
         operationType: 'abort'
       });
     }
+
     onProgressUpdate (callback) {
       if (typeof callback !== 'function') {
         return
       }
       this._callbacks.push(callback);
     }
+
     onHeadersReceived () {
 
     }
+
     offProgressUpdate (callback) {
       const index = this._callbacks.indexOf(callback);
       if (index >= 0) {
         this._callbacks.splice(index, 1);
       }
     }
+
     offHeadersReceived () {
 
     }
@@ -11607,7 +12289,7 @@ var serviceContext = (function () {
     return task
   }
 
-  var require_context_module_1_20 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_23 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     uploadFile: uploadFile$1
   });
@@ -11626,28 +12308,33 @@ var serviceContext = (function () {
       this.currentStepAnimates = [];
       this.option = Object.assign({}, defaultOption, option);
     }
+
     _getOption (option) {
-      let _option = {
+      const _option = {
         transition: Object.assign({}, this.option, option)
       };
       _option.transformOrigin = _option.transition.transformOrigin;
       delete _option.transition.transformOrigin;
       return _option
     }
+
     _pushAnimates (type, args) {
       this.currentStepAnimates.push({
         type: type,
         args: args
       });
     }
+
     _converType (type) {
       return type.replace(/[A-Z]/g, text => {
         return `-${text.toLowerCase()}`
       })
     }
+
     _getValue (value) {
       return typeof value === 'number' ? `${value}px` : value
     }
+
     export () {
       const actions = this.actions;
       this.actions = [];
@@ -11655,6 +12342,7 @@ var serviceContext = (function () {
         actions
       }
     }
+
     step (option) {
       this.currentStepAnimates.forEach(animate => {
         if (animate.type !== 'style') {
@@ -11690,7 +12378,7 @@ var serviceContext = (function () {
     return new MPAnimation(option)
   }
 
-  var require_context_module_1_21 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_24 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     createAnimation: createAnimation
   });
@@ -11709,20 +12397,24 @@ var serviceContext = (function () {
       this.component = component._$id || component; // app-plus 平台传输_$id
       this.options = Object.assign({}, defaultOptions, options);
     }
+
     _makeRootMargin (margins = {}) {
       this.options.rootMargin = ['top', 'right', 'bottom', 'left'].map(name => `${Number(margins[name]) || 0}px`).join(
         ' ');
     }
+
     relativeTo (selector, margins) {
       this.options.relativeToSelector = selector;
       this._makeRootMargin(margins);
       return this
     }
+
     relativeToViewport (margins) {
       this.options.relativeToSelector = null;
       this._makeRootMargin(margins);
       return this
     }
+
     observe (selector, callback) {
       if (typeof callback !== 'function') {
         return
@@ -11737,6 +12429,7 @@ var serviceContext = (function () {
         options: this.options
       }, this.pageId);
     }
+
     disconnect () {
       UniServiceJSBridge.publishHandler('destroyComponentObserver', {
         reqId: this.reqId
@@ -11755,9 +12448,56 @@ var serviceContext = (function () {
     return new ServiceIntersectionObserver(getCurrentPageVm('createIntersectionObserver'), options)
   }
 
-  var require_context_module_1_22 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_25 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     createIntersectionObserver: createIntersectionObserver
+  });
+
+  const createMediaQueryObserverCallbacks = createCallbacks('requestMediaQueryObserver');
+
+  class ServiceMediaQueryObserver {
+    constructor (component, options) {
+      this.pageId = component.$page.id;
+      this.component = component._$id || component; // app-plus 平台传输_$id
+      this.options = options;
+    }
+
+    observe (options, callback) {
+      if (typeof callback !== 'function') {
+        return
+      }
+      this.options = options;
+
+      this.reqId = createMediaQueryObserverCallbacks.push(callback);
+
+      UniServiceJSBridge.publishHandler('requestMediaQueryObserver', {
+        reqId: this.reqId,
+        component: this.component,
+        options: this.options
+      }, this.pageId);
+    }
+
+    disconnect () {
+      UniServiceJSBridge.publishHandler('destroyMediaQueryObserver', {
+        reqId: this.reqId
+      }, this.pageId);
+    }
+  }
+
+  function createMediaQueryObserver (context, options) {
+    if (!context._isVue) {
+      options = context;
+      context = null;
+    }
+    if (context) {
+      return new ServiceMediaQueryObserver(context, options)
+    }
+    return new ServiceMediaQueryObserver(getCurrentPageVm('createMediaQueryObserver'), options)
+  }
+
+  var require_context_module_1_26 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    createMediaQueryObserver: createMediaQueryObserver
   });
 
   const ContextClasss = {
@@ -11896,26 +12636,9 @@ var serviceContext = (function () {
     return new SelectorQuery(getCurrentPageVm('createSelectorQuery'))
   }
 
-  var require_context_module_1_23 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_27 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     createSelectorQuery: createSelectorQuery
-  });
-
-  const callbacks$c = [];
-
-  onMethod('onKeyboardHeightChange', res => {
-    callbacks$c.forEach(callbackId => {
-      invoke$1(callbackId, res);
-    });
-  });
-
-  function onKeyboardHeightChange (callbackId) {
-    callbacks$c.push(callbackId);
-  }
-
-  var require_context_module_1_24 = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    onKeyboardHeightChange: onKeyboardHeightChange
   });
 
   UniServiceJSBridge.subscribe('onLoadFontFaceCallback', ({
@@ -11938,7 +12661,7 @@ var serviceContext = (function () {
     }, pageId);
   }
 
-  var require_context_module_1_25 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_28 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     loadFontFace: loadFontFace$1
   });
@@ -11951,7 +12674,7 @@ var serviceContext = (function () {
     return {}
   }
 
-  var require_context_module_1_26 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_29 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     pageScrollTo: pageScrollTo$1
   });
@@ -11964,7 +12687,7 @@ var serviceContext = (function () {
     return {}
   }
 
-  var require_context_module_1_27 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_30 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     setPageMeta: setPageMeta
   });
@@ -11989,19 +12712,19 @@ var serviceContext = (function () {
 
   const hideTabBarRedDot$1 = removeTabBarBadge$1;
 
-  const callbacks$d = [];
+  const callbacks$c = [];
 
   onMethod('onTabBarMidButtonTap', res => {
-    callbacks$d.forEach(callbackId => {
+    callbacks$c.forEach(callbackId => {
       invoke$1(callbackId, res);
     });
   });
 
   function onTabBarMidButtonTap (callbackId) {
-    callbacks$d.push(callbackId);
+    callbacks$c.push(callbackId);
   }
 
-  var require_context_module_1_28 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_31 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     removeTabBarBadge: removeTabBarBadge$1,
     showTabBarRedDot: showTabBarRedDot$1,
@@ -12009,25 +12732,25 @@ var serviceContext = (function () {
     onTabBarMidButtonTap: onTabBarMidButtonTap
   });
 
-  const callbacks$e = [];
+  const callbacks$d = [];
   onMethod('onViewDidResize', res => {
-    callbacks$e.forEach(callbackId => {
+    callbacks$d.forEach(callbackId => {
       invoke$1(callbackId, res);
     });
   });
 
   function onWindowResize (callbackId) {
-    callbacks$e.push(callbackId);
+    callbacks$d.push(callbackId);
   }
 
   function offWindowResize (callbackId) {
     // TODO 目前 on 和 off 即使传入同一个 function，获取到的 callbackId 也不会一致，导致不能 off 掉指定
     // 后续修复
     // 此处和微信平台一致查询不到去掉最后一个
-    callbacks$e.splice(callbacks$e.indexOf(callbackId), 1);
+    callbacks$d.splice(callbacks$d.indexOf(callbackId), 1);
   }
 
-  var require_context_module_1_29 = /*#__PURE__*/Object.freeze({
+  var require_context_module_1_32 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     onWindowResize: onWindowResize,
     offWindowResize: offWindowResize
@@ -12048,26 +12771,29 @@ var serviceContext = (function () {
   './context/create-map-context.js': require_context_module_1_7,
   './context/create-video-context.js': require_context_module_1_8,
   './context/editor.js': require_context_module_1_9,
-  './device/accelerometer.js': require_context_module_1_10,
-  './device/bluetooth.js': require_context_module_1_11,
+  './context/inner-audio.js': require_context_module_1_10,
+  './device/accelerometer.js': require_context_module_1_11,
   './device/compass.js': require_context_module_1_12,
   './device/network.js': require_context_module_1_13,
   './device/theme.js': require_context_module_1_14,
-  './media/preview-image.js': require_context_module_1_15,
-  './media/recorder.js': require_context_module_1_16,
-  './network/download-file.js': require_context_module_1_17,
-  './network/request.js': require_context_module_1_18,
-  './network/socket.js': require_context_module_1_19,
-  './network/upload-file.js': require_context_module_1_20,
-  './ui/create-animation.js': require_context_module_1_21,
-  './ui/create-intersection-observer.js': require_context_module_1_22,
-  './ui/create-selector-query.js': require_context_module_1_23,
-  './ui/keyboard.js': require_context_module_1_24,
-  './ui/load-font-face.js': require_context_module_1_25,
-  './ui/page-scroll-to.js': require_context_module_1_26,
-  './ui/set-page-meta.js': require_context_module_1_27,
-  './ui/tab-bar.js': require_context_module_1_28,
-  './ui/window.js': require_context_module_1_29,
+  './keyboard/get-selected-text-range.js': require_context_module_1_15,
+  './keyboard/keyboard.js': require_context_module_1_16,
+  './media/preview-image.js': require_context_module_1_17,
+  './media/recorder.js': require_context_module_1_18,
+  './network/download-file.js': require_context_module_1_19,
+  './network/request.js': require_context_module_1_20,
+  './network/socket.js': require_context_module_1_21,
+  './network/update.js': require_context_module_1_22,
+  './network/upload-file.js': require_context_module_1_23,
+  './ui/create-animation.js': require_context_module_1_24,
+  './ui/create-intersection-observer.js': require_context_module_1_25,
+  './ui/create-media-query-observer.js': require_context_module_1_26,
+  './ui/create-selector-query.js': require_context_module_1_27,
+  './ui/load-font-face.js': require_context_module_1_28,
+  './ui/page-scroll-to.js': require_context_module_1_29,
+  './ui/set-page-meta.js': require_context_module_1_30,
+  './ui/tab-bar.js': require_context_module_1_31,
+  './ui/window.js': require_context_module_1_32,
 
       };
       var req = function req(key) {
@@ -12148,7 +12874,7 @@ var serviceContext = (function () {
       return
     }
     if (!page.$page.meta.isNVue) {
-      const target = page.$vm._$vd.elements.find(target => target.tagName === 'web-view' && target.events['message']);
+      const target = page.$vm._$vd.elements.find(target => target.type === 'web-view' && target.events.message);
       if (!target) {
         return
       }
@@ -12219,7 +12945,17 @@ var serviceContext = (function () {
     }
 
     function onAppEnterForeground () {
-      callAppHook(getApp(), 'onShow');
+      const pages = getCurrentPages();
+      if (pages.length === 0) {
+        return
+      }
+      const page = pages[pages.length - 1];
+      const args = {
+        path: page.route,
+        query: page.options
+      };
+
+      callAppHook(getApp(), 'onShow', args);
       callCurrentPageHook('onShow');
     }
 
@@ -12258,6 +12994,7 @@ var serviceContext = (function () {
     on('onNavigationBarSearchInputChanged', createCallCurrentPageHook('onNavigationBarSearchInputChanged'));
     on('onNavigationBarSearchInputConfirmed', createCallCurrentPageHook('onNavigationBarSearchInputConfirmed'));
     on('onNavigationBarSearchInputClicked', createCallCurrentPageHook('onNavigationBarSearchInputClicked'));
+    on('onNavigationBarSearchInputFocusChanged', createCallCurrentPageHook('onNavigationBarSearchInputFocusChanged'));
 
     on('onWebInvokeAppService', onWebInvokeAppService);
   }
@@ -12273,7 +13010,7 @@ var serviceContext = (function () {
         const page = pages.find(page => page.$page.id === pageId);
         if (page) {
           callPageHook(page, eventType, args);
-        } else {
+        } else if (process.env.NODE_ENV !== 'production') {
           console.error(`Not Found：Page[${pageId}]`);
         }
       }
@@ -12308,11 +13045,29 @@ var serviceContext = (function () {
       }
     }
 
+    const requestMediaQueryObserverCallbacks = createCallbacks('requestMediaQueryObserver');
+
+    function onRequestMediaQueryObserver ({
+      reqId,
+      reqEnd,
+      res
+    }) {
+      const callback = requestMediaQueryObserverCallbacks.get(reqId);
+      if (callback) {
+        if (reqEnd) {
+          requestMediaQueryObserverCallbacks.pop(reqId);
+          return
+        }
+        callback(res);
+      }
+    }
+
     subscribe('onPageScroll', createPageEvent('onPageScroll'));
     subscribe('onReachBottom', createPageEvent('onReachBottom'));
 
     subscribe('onRequestComponentInfo', onRequestComponentInfo);
     subscribe('onRequestComponentObserver', onRequestComponentObserver);
+    subscribe('onRequestMediaQueryObserver', onRequestMediaQueryObserver);
   }
 
   function perf (type, startTime) {
@@ -12378,8 +13133,6 @@ var serviceContext = (function () {
       handlers.forEach(handler => {
         handler(data);
       });
-    } else {
-      console.error(`vdSync[${pageId}] not found`);
     }
   }
 
@@ -12454,23 +13207,26 @@ var serviceContext = (function () {
       subscribeHandler(data.type, data.data, data.pageId);
     });
 
-    subscribe(WEBVIEW_READY, onWebviewReady);
+    if (__uniConfig.renderer !== 'native') {
+      subscribe(WEBVIEW_READY, onWebviewReady);
 
-    const entryPagePath = '/' + __uniConfig.entryPagePath;
-    const routeOptions = __uniRoutes.find(route => route.path === entryPagePath);
-    if (!routeOptions.meta.isNVue) { // 首页是 vue
-      // 防止首页 webview 初始化过早， service 还未开始监听
-      publishHandler(WEBVIEW_READY, Object.create(null), [1]);
+      subscribe(VD_SYNC, onVdSync);
+      subscribe(VD_SYNC_CALLBACK, onVdSyncCallback);
+
+      const entryPagePath = '/' + __uniConfig.entryPagePath;
+      const routeOptions = __uniRoutes.find(route => route.path === entryPagePath);
+      if (!routeOptions.meta.isNVue) { // 首页是 vue
+        // 防止首页 webview 初始化过早， service 还未开始监听
+        publishHandler(WEBVIEW_READY, Object.create(null), [1]);
+      }
     }
+
     // 应该使用subscribe，兼容老版本先用 on api 吧
     on('api.' + WEB_INVOKE_APPSERVICE$1, function (data, webviewIds) {
       emit('onWebInvokeAppService', data, webviewIds);
     });
 
     subscribe('onWxsInvokeCallMethod', onWxsInvokeCallMethod);
-
-    subscribe(VD_SYNC, onVdSync);
-    subscribe(VD_SYNC_CALLBACK, onVdSyncCallback);
 
     subscribe(INVOKE_API, onInvokeApi);
 
@@ -12502,10 +13258,17 @@ var serviceContext = (function () {
     const globalEvent = requireNativePlugin('globalEvent');
     const emit = UniServiceJSBridge.emit;
 
-    // splashclosed 时开始监听 backbutton
-    plus.globalEvent.addEventListener('splashclosed', () => {
+    if (weex.config.preload) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[uni-app] preload.addEventListener.backbutton');
+      }
       plus.key.addEventListener('backbutton', backbuttonListener);
-    });
+    } else {
+      // splashclosed 时开始监听 backbutton
+      plus.globalEvent.addEventListener('splashclosed', () => {
+        plus.key.addEventListener('backbutton', backbuttonListener);
+      });
+    }
 
     plus.globalEvent.addEventListener('pause', () => {
       emit('onAppEnterBackground');
@@ -12530,16 +13293,21 @@ var serviceContext = (function () {
     });
 
     globalEvent.addEventListener('uistylechange', function (event) {
+      const args = {
+        theme: event.uistyle
+      };
+
+      callAppHook(appCtx, 'onThemeChange', args);
+      publish('onThemeChange', args);
+
+      // 兼容旧版本 API
       publish('onUIStyleChange', {
         style: event.uistyle
       });
     });
 
-    globalEvent.addEventListener('uniMPNativeEvent', function ({
-      event,
-      data
-    }) {
-      consumeNativeEvent(event, data);
+    globalEvent.addEventListener('uniMPNativeEvent', function (event) {
+      publish('uniMPNativeEvent', event);
     });
 
     plus.globalEvent.addEventListener('plusMessage', onPlusMessage$1);
@@ -12570,7 +13338,7 @@ var serviceContext = (function () {
   }
 
   function initTabBar () {
-    if (!__uniConfig.tabBar || !__uniConfig.tabBar.list.length) {
+    if (!__uniConfig.tabBar || !__uniConfig.tabBar.list || !__uniConfig.tabBar.list.length) {
       return
     }
 
@@ -12600,53 +13368,36 @@ var serviceContext = (function () {
     }
   }
 
-  function initEntryPage () {
-    let entryPagePath;
-    let entryPageQuery;
-
-    const weexPlus = weex.requireModule('plus');
-
-    if (weexPlus.getRedirectInfo) {
-      const info = weexPlus.getRedirectInfo() || {};
-      entryPagePath = info.path;
-      entryPageQuery = info.query ? ('?' + info.query) : '';
-    } else {
-      const argsJsonStr = plus.runtime.arguments;
-      if (!argsJsonStr) {
-        return
-      }
-      try {
-        const args = JSON.parse(argsJsonStr);
-        entryPagePath = args.path || args.pathName;
-        entryPageQuery = args.query ? ('?' + args.query) : '';
-      } catch (e) {}
+  function clearTempFile () {
+    // 统一处理路径
+    function getPath (path) {
+      path = path.replace(/\/$/, '');
+      return path.indexOf('_') === 0 ? plus.io.convertLocalFileSystemURL(path) : path
     }
-
-    if (!entryPagePath || entryPagePath === __uniConfig.entryPagePath) {
-      return
-    }
-
-    const entryRoute = '/' + entryPagePath;
-    const routeOptions = __uniRoutes.find(route => route.path === entryRoute);
-    if (!routeOptions) {
-      return
-    }
-
-    if (!routeOptions.meta.isTabBar) {
-      __uniConfig.realEntryPagePath = __uniConfig.realEntryPagePath || __uniConfig.entryPagePath;
-    }
-
-    __uniConfig.entryPagePath = entryPagePath;
-    __uniConfig.entryPageQuery = entryPageQuery;
-
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[uni-app] entryPagePath(${entryPagePath + entryPageQuery})`);
-    }
+    var basePath = getPath(TEMP_PATH_BASE);
+    var tempPath = getPath(TEMP_PATH);
+    // 获取父目录
+    var dirPath = tempPath.split('/');
+    dirPath.pop();
+    dirPath = dirPath.join('/');
+    plus.io.resolveLocalFileSystemURL(plus.io.convertAbsoluteFileSystem(dirPath), entry => {
+      var reader = entry.createReader();
+      reader.readEntries(function (entries) {
+        if (entries && entries.length) {
+          entries.forEach(function (entry) {
+            if (entry.isDirectory && entry.fullPath.indexOf(basePath) === 0 && entry.fullPath
+              .indexOf(tempPath) !== 0) {
+              entry.removeRecursively();
+            }
+          });
+        }
+      });
+    });
   }
 
   function registerApp (appVm) {
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`[uni-app] registerApp`);
+      console.log('[uni-app] registerApp');
     }
 
     appCtx = appVm;
@@ -12673,6 +13424,9 @@ var serviceContext = (function () {
 
     initAppLaunch(appVm);
 
+    // 10s后清理临时文件
+    setTimeout(clearTempFile, 10000);
+
     __uniConfig.ready = true;
 
     process.env.NODE_ENV !== 'production' && perf('registerApp');
@@ -12680,6 +13434,12 @@ var serviceContext = (function () {
 
   var tags = [
     'uni-app',
+    'uni-layout',
+    'uni-content',
+    'uni-main',
+    'uni-top-window',
+    'uni-left-window',
+    'uni-right-window',
     'uni-tabbar',
     'uni-page',
     'uni-page-head',
@@ -12735,19 +13495,24 @@ var serviceContext = (function () {
     'uni-web-view'
   ];
 
-  function hasLifecycleHook (vueOptions = {}, hook) {
-    return Array.isArray(vueOptions[hook]) && vueOptions[hook].length
-  }
-
   // 使用白名单过滤（前期有一批自定义组件使用了 uni-）
 
   function initVue (Vue) {
-    Vue.config.errorHandler = function (err) {
+    Vue.config.errorHandler = function (err, vm, info) {
+      const errType = toRawType(err);
+      Vue.util.warn(`Error in ${info}: "${errType === 'Error' ? err.toString() : err}"`, vm);
       const app = typeof getApp === 'function' && getApp();
       if (app && hasLifecycleHook(app.$options, 'onError')) {
         app.__call_hook('onError', err);
       } else {
-        console.error(err);
+        if ( process.env.NODE_ENV !== 'production' && errType === 'Error') {
+          console.error(`
+  ${err.message}
+  ${err.stack}
+  `);
+        } else {
+          console.error(err);
+        }
       }
     };
 
@@ -12767,7 +13532,7 @@ var serviceContext = (function () {
       if (~conflictTags.indexOf(tag)) { // svg 部分标签名称与 uni 标签冲突
         return false
       }
-      return oldGetTagNamespace(tag) || false
+      return oldGetTagNamespace(tag)
     };
   }
 
@@ -12843,6 +13608,10 @@ var serviceContext = (function () {
       return uni.createIntersectionObserver(this, options)
     };
 
+    Vue.prototype.createMediaQueryObserver = function createMediaQueryObserver (options) {
+      return uni.createMediaQueryObserver(this, options)
+    };
+
     Vue.prototype.selectComponent = function selectComponent (selector) {
       return querySelector(this, parseSelector(selector))
     };
@@ -12852,13 +13621,22 @@ var serviceContext = (function () {
     };
   }
 
+  /**
+   * mpvue event
+   */
+  function wrapperMPEvent (event) {
+    event.mp = Object.assign({
+      '@warning': 'mp is deprecated'
+    }, event);
+    event._processed = true;
+    return event
+  }
+
   const isAndroid = plus.os.name.toLowerCase() === 'android';
   const FOCUS_TIMEOUT = isAndroid ? 300 : 700;
-  const HIDE_TIMEOUT = 800;
   let keyboardHeight = 0;
   let onKeyboardShow;
   let focusTimer;
-  let hideKeyboardTimeout;
 
   function hookKeyboardEvent (event, callback) {
     onKeyboardShow = null;
@@ -12886,19 +13664,6 @@ var serviceContext = (function () {
     keyboardHeight = res.height;
     if (keyboardHeight > 0) {
       onKeyboardShow && onKeyboardShow();
-      if (hideKeyboardTimeout) {
-        clearTimeout(hideKeyboardTimeout);
-        hideKeyboardTimeout = null;
-      }
-    } else {
-      // 安卓/iOS13收起键盘时通知view层失去焦点
-      if (isAndroid || parseInt(plus.os.version) >= 13) {
-        hideKeyboardTimeout = setTimeout(function () {
-          hideKeyboardTimeout = null;
-          var pageId = getCurrentPageId();
-          UniServiceJSBridge.publishHandler('hideKeyboard', {}, pageId);
-        }, HIDE_TIMEOUT);
-      }
     }
   });
 
@@ -12941,10 +13706,7 @@ var serviceContext = (function () {
     parseTargets(event);
     event.preventDefault = noop;
     event.stopPropagation = noop;
-    event.mp = event;
-    return Object.assign({
-      mp: event // mpvue
-    }, event)
+    return wrapperMPEvent(event)
   }
 
   const handleVdData = {
@@ -12953,7 +13715,10 @@ var serviceContext = (function () {
         nid = String(nid);
         const target = vd.elements.find(target => target.cid === cid && target.nid === nid);
         if (!target) {
-          return console.error(`event handler[${cid}][${nid}] not found`)
+          if (process.env.NODE_ENV !== 'production') {
+            console.error(`event handler[${cid}][${nid}] not found`);
+          }
+          return
         }
         const type = event.type;
         const mpEvent = wrapperEvent(event);
@@ -12975,9 +13740,10 @@ var serviceContext = (function () {
   }
 
   class VDomSync {
-    constructor (pageId, pagePath, pageVm) {
+    constructor (pageId, pagePath, pageQuery, pageVm) {
       this.pageId = pageId;
       this.pagePath = pagePath;
+      this.pageQuery = pageQuery;
       this.pageVm = pageVm;
       this.batchData = [];
       this.vms = Object.create(null);
@@ -13039,16 +13805,12 @@ var serviceContext = (function () {
     removeElement (elm) {
       const elmIndex = this.elements.indexOf(elm);
       if (elmIndex === -1) {
-        return console.error(`removeElement[${elm.cid}][${elm.nid}] not found`)
-      }
-      this.elements.splice(elmIndex, 1);
-    }
-
-    removeElementByCid (cid) {
-      if (!cid) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.error(`removeElement[${elm.cid}][${elm.nid}] not found`);
+        }
         return
       }
-      this.elements = this.elements.filter(elm => elm.cid !== cid);
+      this.elements.splice(elmIndex, 1);
     }
 
     push (type, cid, data, options) {
@@ -13078,7 +13840,7 @@ var serviceContext = (function () {
     flush () {
       if (!this.initialized) {
         this.initialized = true;
-        this.batchData.push([PAGE_CREATED, [this.pageId, this.pagePath]]);
+        this.batchData.push([PAGE_CREATED, [this.pageId, this.pagePath, this.pageQuery]]);
       }
       const batchData = this.batchData.filter(data => {
         if (data[0] === UPDATED_DATA && !Object.keys(data[1][1]).length) {
@@ -13113,7 +13875,7 @@ var serviceContext = (function () {
     }
 
     restorePageCreated () {
-      this.batchData.push([PAGE_CREATED, [this.pageId, this.pagePath]]);
+      this.batchData.push([PAGE_CREATED, [this.pageId, this.pagePath, this.pageQuery]]);
     }
 
     restore () {
@@ -13136,43 +13898,28 @@ var serviceContext = (function () {
     }
   }
 
+  function generateId (vm, parent, version) {
+    if (!vm.$parent) {
+      return '-1'
+    }
+    const vnode = vm.$vnode;
+    const context = vnode.context;
+    let id = vnode.data.attrs._i;
+    if (version && hasOwn(vnode.data, 'key')) { // 补充 key 值
+      id = id + ';' + vnode.data.key;
+    }
+    // slot 内的组件，需要补充 context 的 id，否则可能与内部组件索引值一致，导致 id 冲突
+    if (context && context !== parent && context._$id) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('generateId:' + context._$id + ';' + parent._$id + ',' + id);
+      }
+      return context._$id + ';' + parent._$id + ',' + id
+    }
+    return parent._$id + ',' + id
+  }
+
   function setResult (data, k, v) {
     data[k] = v;
-  }
-
-  function diffObject (newObj, oldObj, every = true) {
-    let result, key, cur, old;
-    for (key in newObj) {
-      cur = newObj[key];
-      old = oldObj[key];
-      if (old !== cur) {
-        if (!every) {
-          return newObj
-        }
-        setResult(result || (result = Object.create(null)), key, cur);
-      }
-    }
-    return result
-  }
-
-  function diffArray (newArr, oldArr) {
-    const newLen = newArr.length;
-    if (newLen !== oldArr.length) {
-      return newArr
-    }
-    if (isPlainObject(newArr[0])) {
-      for (let i = 0; i < newLen; i++) {
-        if (diffObject(newArr[i], oldArr[i], false)) {
-          return newArr
-        }
-      }
-    } else {
-      for (let i = 0; i < newLen; i++) {
-        if (newArr[i] !== oldArr[i]) {
-          return newArr
-        }
-      }
-    }
   }
 
   function diffElmData (newObj, oldObj) {
@@ -13180,21 +13927,8 @@ var serviceContext = (function () {
     for (key in newObj) {
       cur = newObj[key];
       old = oldObj[key];
-      if (old !== cur) {
-        // 全量同步 style (因为 style 可能会动态删除部分样式)
-        if (key === B_STYLE && isPlainObject(cur) && isPlainObject(old)) {
-          if (Object.keys(cur).length !== Object.keys(old).length) { // 长度不等
-            setResult(result || (result = Object.create(null)), B_STYLE, cur);
-          } else {
-            const style = diffObject(cur, old, false);
-            style && setResult(result || (result = Object.create(null)), B_STYLE, style);
-          }
-        } else if (key === V_FOR && Array.isArray(cur) && Array.isArray(old)) {
-          const vFor = diffArray(cur, old);
-          vFor && setResult(result || (result = Object.create(null)), V_FOR, vFor);
-        } else {
-          setResult(result || (result = Object.create(null)), key, cur);
-        }
+      if (!looseEqual(old, cur)) {
+        setResult(result || (result = Object.create(null)), key, cur);
       }
     }
     return result
@@ -13243,10 +13977,7 @@ var serviceContext = (function () {
       if (!this._$vd) {
         return
       }
-      // TODO 自定义组件中的 slot 数据采集是在组件内部，导致所在 context 中无法获取到差量数据
-      // 如何保证每个 vm 数据有变动，就加入 diff 中呢？
-      // 每次变化，可能触发多次 beforeUpdate，updated
-      // 子组件 updated 时，可能会增加父组件的 diffData，如 slot 等情况
+
       diff(this._$newData, this._$data, this._$vdUpdatedData);
       this._$data = JSON.parse(JSON.stringify(this._$newData));
       // setTimeout 一下再 nextTick（ 直接 nextTick 的话，会紧接着该 updated 做 flush，导致父组件 updated 数据被丢弃）
@@ -13270,14 +14001,10 @@ var serviceContext = (function () {
           return
         }
         if (this.mpType === 'page') {
-          this._$vdomSync = new VDomSync(this.$options.pageId, this.$options.pagePath, this);
+          this._$vdomSync = new VDomSync(this.$options.pageId, this.$options.pagePath, this.$options.pageQuery, this);
         }
         if (this._$vd) {
-          if (!this.$parent) {
-            this._$id = '-1';
-          } else {
-            this._$id = this.$parent._$id + ',' + this.$vnode.data.attrs._i;
-          }
+          this._$id = generateId(this, this.$parent, VD_SYNC_VERSION);
           this._$vd.addVm(this);
           this._$vdMountedData = Object.create(null);
           this._$setData(MOUNTED_DATA, this._$vdMountedData);
@@ -13325,6 +14052,10 @@ var serviceContext = (function () {
     return clazz
   }
 
+  function isNotSafeString (value) {
+    return value === 'null' || value === 'true' || value === 'false' || !isNaN(Number(value)) || (value.startsWith('[') && value.endsWith(']')) || (value.startsWith('{') && value.endsWith('}'))
+  }
+
   function setData (id, name, value) {
     switch (name) {
       case B_CLASS:
@@ -13345,7 +14076,7 @@ var serviceContext = (function () {
         return setForData.call(this, id, value)
     }
     // TODO 暂时先传递 dataset 至 view 层(理论上不需要)
-    if (name.indexOf('a-data-') === 0) {
+    if (name.indexOf('a-data-') === 0 && (typeof value !== 'string' || isNotSafeString(value))) {
       try {
         value = JSON.stringify(value);
       } catch (e) {}
@@ -13401,7 +14132,10 @@ var serviceContext = (function () {
     'onShow',
     'onHide',
     'onUniNViewMessage',
+    'onPageNotFound',
+    'onThemeChange',
     'onError',
+    'onUnhandledRejection',
     // Page
     'onLoad',
     // 'onShow',
@@ -13411,6 +14145,8 @@ var serviceContext = (function () {
     'onPullDownRefresh',
     'onReachBottom',
     'onTabItemTap',
+    'onAddToFavorites',
+    'onShareTimeline',
     'onShareAppMessage',
     'onResize',
     'onPageScroll',
@@ -13419,6 +14155,7 @@ var serviceContext = (function () {
     'onNavigationBarSearchInputChanged',
     'onNavigationBarSearchInputConfirmed',
     'onNavigationBarSearchInputClicked',
+    'onNavigationBarSearchInputFocusChanged',
     // Component
     // 'onReady', // 兼容旧版本，应该移除该事件
     'onPageShow',
@@ -13508,13 +14245,14 @@ var serviceContext = (function () {
     const statusbarHeight = getStatusbarHeight();
 
     return {
+      version: VD_SYNC_VERSION,
       disableScroll,
       onPageScroll,
       onPageReachBottom,
       onReachBottomDistance,
       statusbarHeight,
       windowTop: windowOptions.titleNView && windowOptions.titleNView.type === 'float' ? (statusbarHeight +
-        TITLEBAR_HEIGHT) : 0,
+        NAVBAR_HEIGHT) : 0,
       windowBottom: (tabBar$1.indexOf(route) >= 0 && tabBar$1.cover) ? tabBar$1.height : 0
     }
   }
@@ -13552,7 +14290,8 @@ var serviceContext = (function () {
       },
       created () {
         if (this.mpType === 'page') {
-          callPageHook(this.$scope, 'onLoad', this.$options.pageQuery);
+          // 理论上应该从最开始的 parseQuery 的地方直接 decode 两次，为了减少影响范围，先仅处理 onLoad 参数
+          callPageHook(this.$scope, 'onLoad', decodedQuery(this.$options.pageQuery));
           callPageHook(this.$scope, 'onShow');
         }
       },
@@ -13564,6 +14303,7 @@ var serviceContext = (function () {
       mounted () {
         if (this.mpType === 'page') {
           callPageHook(this.$scope, 'onReady');
+          preloadSubPackages(this.$scope.route);
         }
       }
     });
@@ -13577,6 +14317,13 @@ var serviceContext = (function () {
       initLifecycle(Vue);
 
       initPolyfill(Vue);
+
+      Vue.prototype.getOpenerEventChannel = function () {
+        if (!this.$root.$scope.eventChannel) {
+          this.$root.$scope.eventChannel = new EventChannel();
+        }
+        return this.$root.$scope.eventChannel
+      };
 
       Object.defineProperty(Vue.prototype, '$page', {
         get () {
@@ -13596,6 +14343,21 @@ var serviceContext = (function () {
       Vue.prototype.$mount = function mount (el, hydrating) {
         if (this.mpType === 'app') {
           this.$options.render = function () {};
+          if (weex.config.preload) { // preload
+            if (process.env.NODE_ENV !== 'production') {
+              console.log('[uni-app] preload app-service.js');
+            }
+            const globalEvent = weex.requireModule('globalEvent');
+            globalEvent.addEventListener('launchApp', () => {
+              if (process.env.NODE_ENV !== 'production') {
+                console.log('[uni-app] launchApp');
+              }
+              plus.updateConfigInfo && plus.updateConfigInfo();
+              registerApp(this);
+              oldMount.call(this, el, hydrating);
+            });
+            return
+          }
           registerApp(this);
         }
         return oldMount.call(this, el, hydrating)
@@ -13627,7 +14389,7 @@ var serviceContext = (function () {
   UniServiceJSBridge.publishHandler = publishHandler;
   UniServiceJSBridge.invokeCallbackHandler = invokeCallbackHandler;
 
-  var index = {
+  var index$1 = {
     __vuePlugin: vuePlugin,
     __definePage: definePage,
     __registerApp: registerApp,
@@ -13637,7 +14399,7 @@ var serviceContext = (function () {
     getCurrentPages: getCurrentPages$1
   };
 
-  return index;
+  return index$1;
 
 }());
 

@@ -6,7 +6,10 @@ const LIFECYCLE_HOOKS = [
   'onShow',
   'onHide',
   'onUniNViewMessage',
+  'onPageNotFound',
+  'onThemeChange',
   'onError',
+  'onUnhandledRejection',
   // Page
   'onLoad',
   // 'onShow',
@@ -16,6 +19,8 @@ const LIFECYCLE_HOOKS = [
   'onPullDownRefresh',
   'onReachBottom',
   'onTabItemTap',
+  'onAddToFavorites',
+  'onShareTimeline',
   'onShareAppMessage',
   'onResize',
   'onPageScroll',
@@ -24,6 +29,7 @@ const LIFECYCLE_HOOKS = [
   'onNavigationBarSearchInputChanged',
   'onNavigationBarSearchInputConfirmed',
   'onNavigationBarSearchInputClicked',
+  'onNavigationBarSearchInputFocusChanged',
   // Component
   // 'onReady', // 兼容旧版本，应该移除该事件
   'onPageShow',

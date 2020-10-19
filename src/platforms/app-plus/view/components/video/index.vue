@@ -2,7 +2,8 @@
   <uni-video v-on="$listeners">
     <div
       ref="container"
-      class="uni-video-container" />
+      class="uni-video-container"
+    />
     <div class="uni-video-slot">
       <slot />
     </div>
@@ -17,6 +18,7 @@ import native from '../../mixins/native'
 const methods = [
   'play',
   'pause',
+  'stop',
   'seek',
   'sendDanmu',
   'playbackRate',
@@ -54,7 +56,8 @@ const attrs = [
   'pageGesture',
   'enableProgressGesture',
   'showPlayBtn',
-  'showCenterPlayBtn'
+  'showCenterPlayBtn',
+  'showLoading'
 ]
 
 export default {
@@ -142,6 +145,10 @@ export default {
     showCenterPlayBtn: {
       type: [Boolean, String],
       default: true
+    },
+    showLoading: {
+      type: [Boolean, String],
+      default: true
     }
   },
   computed: {
@@ -178,8 +185,8 @@ export default {
       }
     })
     events.forEach(key => {
-      video.addEventListener(key, (data = {}) => {
-        this.$trigger(key, {}, data)
+      video.addEventListener(key, (e) => {
+        this.$trigger(key, {}, { ...e.detail })
       })
     })
   },

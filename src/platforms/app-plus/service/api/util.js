@@ -1,3 +1,7 @@
+import {
+  invoke
+} from '../bridge'
+
 export {
   isTabBarPage
 } from '../bridge'
@@ -27,18 +31,18 @@ const getRealRoute = (e, t) => {
   if (t.indexOf('./') === 0) return getRealRoute(e, t.substr(2), !1)
   let n
   let i
-  let o = t.split('/')
+  const o = t.split('/')
   for (n = 0, i = o.length; n < i && o[n] === '..'; n++);
   o.splice(0, n)
   t = o.join('/')
-  let r = e.length > 0 ? e.split('/') : []
+  const r = e.length > 0 ? e.split('/') : []
   r.splice(r.length - n - 1, n + 1)
   return r.concat(o).join('/')
 }
 
 // 处理 Android 平台解压与非解压模式下获取的路径不一致的情况
 const _handleLocalPath = filePath => {
-  let localUrl = plus.io.convertLocalFileSystemURL(filePath)
+  const localUrl = plus.io.convertLocalFileSystemURL(filePath)
   return localUrl.replace(/^\/?apps\//, '/android_asset/apps/').replace(/\/$/, '')
 }
 
@@ -150,20 +154,60 @@ const outOfChina = function (lng, lat) {
   return (lng < 72.004 || lng > 137.8347) || ((lat < 0.8293 || lat > 55.8271) || false)
 }
 
-export function getStatusbarHeight () {
-  // 横屏时 iOS 获取的状态栏高度错误，进行纠正
-  return plus.navigator.isImmersedStatusbar() ? Math.round(plus.os.name === 'iOS' ? plus.navigator.getSafeAreaInsets().top : plus.navigator.getStatusbarHeight()) : 0
+export function getScreenInfo () {
+  const { resolutionWidth, resolutionHeight } = plus.screen.getCurrentSize()
+  return {
+    screenWidth: Math.round(resolutionWidth),
+    screenHeight: Math.round(resolutionHeight)
+  }
 }
 
-export function getScreenInfo () {
-  const orientation = plus.navigator.getOrientation()
-  const landscape = Math.abs(orientation) === 90
-  // 安卓 plus 接口获取的屏幕大小值不为整数
-  const width = plus.screen.resolutionWidth
-  const height = plus.screen.resolutionHeight
-  // 根据方向纠正宽高
-  return {
-    screenWidth: Math[landscape ? 'max' : 'min'](width, height),
-    screenHeight: Math[landscape ? 'min' : 'max'](width, height)
+export function warpPlusEvent (origin, name) {
+  return function (callbackId) {
+    origin[name](function (data) {
+      if (data) {
+        delete data.code
+        delete data.message
+      }
+      invoke(callbackId, data)
+    })
   }
+}
+
+export function warpPlusErrorCallback (callbackId, neme, errMsg) {
+  return function errorCallback (error) {
+    error = error || {}
+    invoke(callbackId, {
+      errMsg: `${neme}:fail ${error.message || errMsg || ''}`,
+      errCode: error.code || 0
+    })
+  }
+}
+
+export function warpPlusMethod (origin, name, before) {
+  return function (options, callbackId) {
+    if (typeof before === 'function') {
+      options = before(options)
+    }
+    origin[name](Object.assign(options, {
+      success (data = {}) {
+        delete data.code
+        delete data.message
+        invoke(callbackId, Object.assign({}, data, {
+          errMsg: `${name}:ok`
+        }))
+      },
+      fail: warpPlusErrorCallback(callbackId, name)
+    }))
+  }
+}
+
+export function getFileName (path) {
+  const array = path.split('/')
+  return array[array.length - 1]
+}
+
+export function getExtName (path) {
+  const array = path.split('.')
+  return array.length > 1 ? '.' + array[array.length - 1] : ''
 }

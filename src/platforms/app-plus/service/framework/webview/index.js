@@ -35,10 +35,11 @@ export let preloadWebview
 let id = 2
 
 const WEBVIEW_LISTENERS = {
-  'pullToRefresh': 'onPullDownRefresh',
-  'titleNViewSearchInputChanged': 'onNavigationBarSearchInputChanged',
-  'titleNViewSearchInputConfirmed': 'onNavigationBarSearchInputConfirmed',
-  'titleNViewSearchInputClicked': 'onNavigationBarSearchInputClicked'
+  pullToRefresh: 'onPullDownRefresh',
+  titleNViewSearchInputChanged: 'onNavigationBarSearchInputChanged',
+  titleNViewSearchInputConfirmed: 'onNavigationBarSearchInputConfirmed',
+  titleNViewSearchInputClicked: 'onNavigationBarSearchInputClicked',
+  titleNViewSearchInputFocusChanged: 'onNavigationBarSearchInputFocusChanged'
 }
 
 export function setPreloadWebview (webview) {
@@ -47,6 +48,14 @@ export function setPreloadWebview (webview) {
 
 function noop (str) {
   return str
+}
+
+function getUniPageUrl (path, query) {
+  const queryString = query ? stringifyQuery(query, noop) : ''
+  return {
+    path: path.substr(1),
+    query: queryString ? queryString.substr(1) : queryString
+  }
 }
 
 function getDebugRefresh (path, query, routeOptions) {
@@ -60,7 +69,7 @@ function getDebugRefresh (path, query, routeOptions) {
   }
 }
 
-export function createWebview (path, routeOptions) {
+export function createWebview (path, routeOptions, query, extras = {}) {
   if (routeOptions.meta.isNVue) {
     const webviewId = id++
     const webviewStyle = parseWebviewStyle(
@@ -68,12 +77,15 @@ export function createWebview (path, routeOptions) {
       path,
       routeOptions
     )
+    webviewStyle.uniPageUrl = getUniPageUrl(path, query)
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`[uni-app] createWebview`, webviewId, path, webviewStyle)
+      console.log('[uni-app] createWebview', webviewId, path, webviewStyle)
     }
-    return plus.webview.create('', String(webviewId), webviewStyle, {
+    // android 需要使用
+    webviewStyle.isTab = !!routeOptions.meta.isTabBar
+    return plus.webview.create('', String(webviewId), webviewStyle, Object.assign({
       nvue: true
-    })
+    }, extras))
   }
   if (id === 2) { // 如果首页非 nvue，则直接返回 Launch Webview
     return plus.webview.getLaunchWebview()
@@ -90,11 +102,17 @@ export function initWebview (webview, routeOptions, path, query) {
       '',
       routeOptions
     )
+
+    webviewStyle.uniPageUrl = getUniPageUrl(path, query)
+
     if (!routeOptions.meta.isNVue) {
       webviewStyle.debugRefresh = getDebugRefresh(path, query, routeOptions)
+    } else {
+      // android 需要使用
+      webviewStyle.isTab = !!routeOptions.meta.isTabBar
     }
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`[uni-app] updateWebview`, webviewStyle)
+      console.log('[uni-app] updateWebview', webviewStyle)
     }
 
     webview.setStyle(webviewStyle)

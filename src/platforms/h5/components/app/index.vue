@@ -1,26 +1,36 @@
 <template>
   <uni-app :class="{'uni-app--showtabbar':showTabBar}">
-    <!-- <transition :name="transitionName"> -->
-    <!-- TODO -->
-    <keep-alive :include="keepAliveInclude">
-      <router-view :key="key" />
-    </keep-alive>
-    <!-- </transition> -->
+    <layout
+      ref="layout"
+      :router-key="key"
+      :keep-alive-include="keepAliveInclude"
+    />
     <tab-bar
       v-if="hasTabBar"
       v-show="showTabBar"
-      v-bind="tabBar" />
+      v-bind="tabBar"
+    />
     <toast
       v-if="$options.components.Toast"
-      v-bind="showToast"/>
+      v-bind="showToast"
+    />
     <action-sheet
       v-if="$options.components.ActionSheet"
       v-bind="showActionSheet"
-      @close="_onActionSheetClose" />
+      @close="_onActionSheetClose"
+    />
     <modal
       v-if="$options.components.Modal"
       v-bind="showModal"
-      @close="_onModalClose" />
+      @close="_onModalClose"
+    />
+    <template v-if="sysComponents&&sysComponents.length">
+      <component
+        :is="item"
+        v-for="(item, index) in sysComponents"
+        :key="index"
+      />
+    </template>
   </uni-app>
 </template>
 <script>
@@ -52,7 +62,8 @@ export default {
     return {
       transitionName: 'fade',
       hideTabBar: false,
-      tabBar: __uniConfig.tabBar || {}
+      tabBar: __uniConfig.tabBar || {},
+      sysComponents: this.$sysComponents
     }
   },
   computed: {
@@ -75,7 +86,8 @@ export default {
       if (uni.canIUse('css.var')) {
         const windowBottomValue = !newVal ? (TABBAR_HEIGHT) : 0
         const envMethod = uni.canIUse('css.env') ? 'env' : (uni.canIUse('css.constant') ? 'constant' : '')
-        const windowBottom = windowBottomValue && envMethod ? `calc(${windowBottomValue}px + ${envMethod}(safe-area-inset-bottom))` : `${windowBottomValue}px`
+        const windowBottom = windowBottomValue && envMethod
+          ? `calc(${windowBottomValue}px + ${envMethod}(safe-area-inset-bottom))` : `${windowBottomValue}px`
         document.documentElement.style.setProperty('--window-bottom', windowBottom)
         console.debug(`uni.${windowBottom ? 'showTabBar' : 'hideTabBar'}：--window-bottom=${windowBottom}`)
       }
@@ -107,10 +119,11 @@ export default {
 
 <style>
   @import "~uni-core/view/index.css";
-	uni-app {
-		display: block;
-		box-sizing: border-box;
-		width: 100%;
-		height: 100%;
-	}
+
+  uni-app {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+  }
 </style>

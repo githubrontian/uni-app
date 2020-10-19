@@ -1,34 +1,58 @@
 const path = require('path')
 
+const {
+  normalizePath
+} = require('@dcloudio/uni-cli-shared')
+
+function createCacheGroups () {
+  const cacheGroups = {}
+  if (process.UNI_CONFUSION) { // 加密
+    cacheGroups.confusion = {
+      enforce: true,
+      test: function (module) {
+        if (!module.resource) {
+          return false
+        }
+        if (process.UNI_CONFUSION.includes(normalizePath(module.resource))) {
+          return true
+        }
+        return false
+      },
+      name: 'app-confusion',
+      chunks: 'all'
+    }
+  }
+
+  process.env.UNI_OPT_SUBPACKAGES && Object.keys(process.UNI_SUBPACKAGES).forEach(root => {
+    cacheGroups[root] = {
+      enforce: true,
+      test: function (module) {
+        if (!module.resource) {
+          return false
+        }
+        if (normalizePath(module.resource).includes(root + '/')) {
+          return true
+        }
+        return false
+      },
+      name: root + '/app-sub-service',
+      chunks: 'all'
+    }
+  })
+  return cacheGroups
+}
+
 module.exports = function getSplitChunks () {
   const {
     normalizePath
   } = require('@dcloudio/uni-cli-shared')
 
   if (process.env.UNI_USING_V3) {
-    if (!process.UNI_CONFUSION) { // 无加密
-      return false
-    }
     return {
-      cacheGroups: {
-        vendor: {
-          minSize: 0,
-          minChunks: 1,
-          test: function (module) {
-            if (!module.resource) {
-              return false
-            }
-            if (process.UNI_CONFUSION.includes(normalizePath(module.resource))) {
-              return true
-            }
-            return false
-          },
-          name: 'app-confusion',
-          chunks: 'all'
-        }
-      }
+      cacheGroups: createCacheGroups()
     }
   }
+
   if (!process.env.UNI_USING_COMPONENTS) {
     return {
       cacheGroups: {
@@ -133,7 +157,7 @@ module.exports = function getSplitChunks () {
     return chunks.find(item => !subPackageRoots.find(root => item.name.indexOf(root) === 0))
   }
 
-  const subPackageRoots = Object.keys(process.UNI_SUBPACKAGES)
+  const subPackageRoots = Object.keys(process.UNI_SUBPACKAGES).map(root => root + '/')
 
   Object.keys(process.UNI_SUBPACKAGES).forEach(root => {
     (function (root) {
@@ -145,7 +169,7 @@ module.exports = function getSplitChunks () {
           const matchSubPackages = findSubPackages(chunks)
           if (
             matchSubPackages.size === 1 &&
-            matchSubPackages.has(root) &&
+            matchSubPackages.has(root + '/') &&
             !hasMainPackage(chunks)
           ) {
             if (process.env.UNI_OPT_TRACE) {

@@ -49,7 +49,7 @@ const isScss = fs.existsSync(path.resolve(process.env.UNI_INPUT_DIR, 'uni.scss')
 let sassData = isSass ? getPlatformSass() : getPlatformScss()
 
 if (isSass) {
-  sassData = `@import "@/uni.sass"`
+  sassData = '@import "@/uni.sass"'
 } else if (isScss) {
   sassData = `${sassData}
   @import "@/uni.scss";`
@@ -71,20 +71,21 @@ const sassLoader = {
 
 if (sassLoaderVersion < 8) {
   scssLoader.options.data = sassData
-  scssLoader.options.outputStyle = 'nested'
+  scssLoader.options.outputStyle = 'expanded'
 
   sassLoader.options.data = sassData
-  sassLoader.options.outputStyle = 'nested'
+  sassLoader.options.outputStyle = 'expanded'
   sassLoader.options.indentedSyntax = true
 } else {
-  scssLoader.options.prependData = sassData
+  const name = sassLoaderVersion >= 9 ? 'additionalData' : 'prependData'
+  scssLoader.options[name] = sassData
   scssLoader.options.sassOptions = {
-    outputStyle: 'nested'
+    outputStyle: 'expanded'
   }
 
-  sassLoader.options.prependData = sassData
+  sassLoader.options[name] = sassData
   sassLoader.options.sassOptions = {
-    outputStyle: 'nested',
+    outputStyle: 'expanded',
     indentedSyntax: true
   }
 }

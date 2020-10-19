@@ -23,16 +23,17 @@ const MESSAGE_TYPE = 'scanCode'
 
 export function scanCode ({
   onlyFromCamera = false,
-  scanType
+  scanType,
+  autoDecodeCharSet
 }, callbackId) {
   const barcode = plus.barcode
   const SCAN_TYPES = {
-    'qrCode': [
+    qrCode: [
       barcode.QR,
       barcode.AZTEC,
       barcode.MAXICODE
     ],
-    'barCode': [
+    barCode: [
       barcode.EAN13,
       barcode.EAN8,
       barcode.UPCA,
@@ -45,8 +46,8 @@ export function scanCode ({
       barcode.RSS14,
       barcode.RSSEXPANDED
     ],
-    'datamatrix': [barcode.DATAMATRIX],
-    'pdf417': [barcode.PDF417]
+    datamatrix: [barcode.DATAMATRIX],
+    pdf417: [barcode.PDF417]
   }
 
   const SCAN_MAPS = {
@@ -82,8 +83,8 @@ export function scanCode ({
     })
   }
   if (!filters.length) {
-    filters = filters.concat(SCAN_TYPES['qrCode']).concat(SCAN_TYPES['barCode']).concat(SCAN_TYPES['datamatrix']).concat(
-      SCAN_TYPES['pdf417'])
+    filters = filters.concat(SCAN_TYPES.qrCode).concat(SCAN_TYPES.barCode).concat(SCAN_TYPES.datamatrix).concat(
+      SCAN_TYPES.pdf417)
   }
 
   const buttons = []
@@ -95,18 +96,19 @@ export function scanCode ({
       width: '60px',
       onclick: function () {
         plus.gallery.pick(file => {
-          barcode.scan(file, (type, code) => {
+          barcode.scan(file, (type, code, path, charSet) => {
             if (isDark) {
               plus.navigator.setStatusBarStyle('isDark')
             }
             result = {
               type,
-              code
+              code,
+              charSet
             }
             webview.close('auto')
           }, () => {
             plus.nativeUI.toast('识别失败')
-          }, filters)
+          }, filters, autoDecodeCharSet)
         }, err => {
           if (err.code !== 12) {
             plus.nativeUI.toast('选择失败')
@@ -135,6 +137,7 @@ export function scanCode ({
     __uniapp_type: 'scan',
     __uniapp_dark: isDark,
     __uniapp_scan_type: filters,
+    __uniapp_auto_decode_char_set: autoDecodeCharSet,
     'uni-app': 'none'
   })
   const waiting = plus.nativeUI.showWaiting()
@@ -148,7 +151,7 @@ export function scanCode ({
       invoke(callbackId, {
         result: result.code,
         scanType: SCAN_MAPS[result.type] || '',
-        charSet: 'utf8',
+        charSet: result.charSet || 'utf8',
         path: '',
         errMsg: 'scanCode:ok'
       })

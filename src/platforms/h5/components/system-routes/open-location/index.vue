@@ -1,6 +1,8 @@
 <template>
   <div class="uni-system-open-location">
-    <system-header @back="_back">位置</system-header>
+    <system-header @back="_back">
+      位置
+    </system-header>
     <div class="map-content">
       <iframe
         ref="map"
@@ -8,12 +10,14 @@
         allow="geolocation"
         sandbox="allow-scripts allow-same-origin allow-forms allow-top-navigation allow-modals allow-popups"
         frameborder="0"
-        @load="_load" />
+        @load="_load"
+      />
       <!-- 去这里 -->
       <div
         v-if="isPoimarkerSrc"
         class="actTonav"
-        @click="_nav" />
+        @click="_nav"
+      />
     </div>
   </div>
 </template>
@@ -43,14 +47,8 @@ export default {
       scale,
       name,
       address,
-      src: '',
+      src: latitude && longitude ? `${poimarkerSrc}?type=0&marker=coord:${latitude},${longitude};title:${name};addr:${address};&key=${key}&referer=${referer}` : '',
       isPoimarkerSrc: false
-    }
-  },
-  mounted () {
-    if (this.latitude && this.longitude) {
-      this.src =
-					`${poimarkerSrc}?type=0&marker=coord:${this.latitude},${this.longitude};title:${this.name};addr:${this.address};&key=${key}&referer=${referer}`
     }
   },
   methods: {

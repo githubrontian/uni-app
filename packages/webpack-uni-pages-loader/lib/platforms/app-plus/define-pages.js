@@ -3,11 +3,15 @@ function generatePageCode (pages, pageOptions) {
     if (pageOptions[pagePath].nvue) {
       return ''
     }
-    return `__definePage('${pagePath}',function(){return Vue.extend(require('${pagePath}.vue').default)})`
+    return `__definePage('${pagePath}',function(){return Vue.extend(require('${pagePath}.vue?mpType=page').default)})`
   }).join('\n')
 }
 
-module.exports = function definePages (appJson) {
+function generateUniConfig (appJson, isAppView) {
+  return isAppView ? `window.__uniConfig = ${JSON.stringify({ window: appJson.window }, null)};` : ''
+}
+
+module.exports = function definePages (appJson, isAppView) {
   return {
     name: 'define-pages.js',
     content: `
@@ -22,6 +26,7 @@ if (typeof Promise !== 'undefined' && !Promise.prototype.finally) {
     )
   }
 }
+${generateUniConfig(appJson, isAppView)}
 if(uni.restoreGlobal){
   uni.restoreGlobal(weex,plus,setTimeout,clearTimeout,setInterval,clearInterval)
 }

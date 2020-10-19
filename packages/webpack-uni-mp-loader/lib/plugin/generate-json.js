@@ -11,7 +11,7 @@ const {
 } = require('@dcloudio/uni-cli-shared/lib/cache')
 
 // 主要解决 extends 且未实际引用的组件
-const EMPTY_COMPONENT = `Component({})`
+const EMPTY_COMPONENT = 'Component({})'
 
 const usingComponentsMap = {}
 
@@ -23,7 +23,7 @@ function analyzeUsingComponents () {
   const jsonFileMap = getJsonFileMap()
 
   // 生成所有组件引用关系
-  for (let name of jsonFileMap.keys()) {
+  for (const name of jsonFileMap.keys()) {
     const jsonObj = JSON.parse(jsonFileMap.get(name))
     const usingComponents = jsonObj.usingComponents
     if (!usingComponents || !pageSet.has(name)) {
@@ -89,7 +89,7 @@ module.exports = function generateJson (compilation) {
   analyzeUsingComponents()
 
   const jsonFileMap = getChangedJsonFileMap()
-  for (let name of jsonFileMap.keys()) {
+  for (const name of jsonFileMap.keys()) {
     const jsonObj = JSON.parse(jsonFileMap.get(name))
     if (process.env.UNI_PLATFORM === 'app-plus') { // App平台默认增加usingComponents,激活__wxAppCode__
       jsonObj.usingComponents = jsonObj.usingComponents || {}
@@ -104,6 +104,12 @@ module.exports = function generateJson (compilation) {
       jsonObj.usingComponents = Object.assign(jsonObj.usingGlobalComponents, jsonObj.usingComponents)
     }
     delete jsonObj.usingGlobalComponents
+
+    // usingAutoImportComponents
+    if (jsonObj.usingAutoImportComponents && Object.keys(jsonObj.usingAutoImportComponents).length) {
+      jsonObj.usingComponents = Object.assign(jsonObj.usingAutoImportComponents, jsonObj.usingComponents)
+    }
+    delete jsonObj.usingAutoImportComponents
 
     if (jsonObj.genericComponents && jsonObj.genericComponents.length) { // scoped slots
       // 生成genericComponents json
@@ -144,12 +150,6 @@ module.exports = function generateJson (compilation) {
 
     delete jsonObj.genericComponents
 
-    // usingAutoImportComponents
-    if (jsonObj.usingAutoImportComponents && Object.keys(jsonObj.usingAutoImportComponents).length) {
-      jsonObj.usingComponents = Object.assign(jsonObj.usingAutoImportComponents, jsonObj.usingComponents)
-    }
-    delete jsonObj.usingAutoImportComponents
-
     if (process.env.UNI_PLATFORM !== 'app-plus' && process.env.UNI_PLATFORM !== 'h5') {
       delete jsonObj.navigationBarShadow
     }
@@ -158,7 +158,15 @@ module.exports = function generateJson (compilation) {
 
     const jsFile = name.replace('.json', '.js')
     if (
-      !['app.js', 'manifest.js', 'mini.project.js', 'project.config.js', 'project.swan.js'].includes(jsFile) &&
+      ![
+        'app.js',
+        'manifest.js',
+        'mini.project.js',
+        'quickapp.config.js',
+        'project.config.js',
+        'project.swan.js'
+      ].includes(
+        jsFile) &&
       !compilation.assets[jsFile]
     ) {
       const jsFileAsset = {

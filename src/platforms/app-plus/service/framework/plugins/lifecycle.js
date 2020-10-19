@@ -1,5 +1,6 @@
 import {
-  hasOwn
+  hasOwn,
+  decodedQuery
 } from 'uni-shared'
 
 import {
@@ -16,16 +17,23 @@ import {
   from 'uni-core/service/plugins/lifecycle'
 
 import {
-  ON_REACH_BOTTOM_DISTANCE,
-  TITLEBAR_HEIGHT
+  VD_SYNC_VERSION
+} from '../../../constants'
+
+import {
+  ON_REACH_BOTTOM_DISTANCE
 }
   from '../../constants'
 
+import { NAVBAR_HEIGHT } from 'uni-helpers/constants'
+
 import tabBar from '../tab-bar'
 
+import { getStatusbarHeight } from 'uni-platform/helpers/status-bar'
+
 import {
-  getStatusbarHeight
-} from '../../api/util'
+  preloadSubPackages
+} from '../load-sub-package'
 
 function parsePageCreateOptions (vm, route) {
   const pagePath = '/' + route
@@ -42,13 +50,14 @@ function parsePageCreateOptions (vm, route) {
   const statusbarHeight = getStatusbarHeight()
 
   return {
+    version: VD_SYNC_VERSION,
     disableScroll,
     onPageScroll,
     onPageReachBottom,
     onReachBottomDistance,
     statusbarHeight,
     windowTop: windowOptions.titleNView && windowOptions.titleNView.type === 'float' ? (statusbarHeight +
-      TITLEBAR_HEIGHT) : 0,
+      NAVBAR_HEIGHT) : 0,
     windowBottom: (tabBar.indexOf(route) >= 0 && tabBar.cover) ? tabBar.height : 0
   }
 }
@@ -86,7 +95,8 @@ export function initLifecycle (Vue) {
     },
     created () {
       if (this.mpType === 'page') {
-        callPageHook(this.$scope, 'onLoad', this.$options.pageQuery)
+        // 理论上应该从最开始的 parseQuery 的地方直接 decode 两次，为了减少影响范围，先仅处理 onLoad 参数
+        callPageHook(this.$scope, 'onLoad', decodedQuery(this.$options.pageQuery))
         callPageHook(this.$scope, 'onShow')
       }
     },
@@ -98,6 +108,7 @@ export function initLifecycle (Vue) {
     mounted () {
       if (this.mpType === 'page') {
         callPageHook(this.$scope, 'onReady')
+        preloadSubPackages(this.$scope.route)
       }
     }
   })

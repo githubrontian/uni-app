@@ -1,13 +1,19 @@
 ## 操作场景
 
-云函数URL化 是 uniCloud 为开发者提供的 HTTP 访问服务，让开发者可以通过 HTTP 访问到自己的云函数。
+云函数URL化 是 uniCloud 为开发者提供的 HTTP 访问服务，让开发者可以通过 HTTP URL 方式访问到云函数。
 
-- 当对某一函数开启URL化后，只要根据 HTTP 即可访问到函数，开发者需要关注业务和资源安全。
+- 场景1：比如App端微信支付，需要配服务器回调地址，此时需要一个HTTP URL。
+- 场景2：非uni-app开发的系统，想要连接uniCloud，读取数据，也需要通过HTTP URL方式访问。
+
+云函数默认是只有自己的app在前端通过`uniCloud.callFunction`来调用的，不会暴露到外网。一旦URL化后，开发者需要关注业务和资源安全。
 - 安全：为了保障业务安全性，开发者需在代码中做好权限控制和安全防护，避免未授权访问触发敏感操作。
 - 计费：云函数开启了URL化后，如果遇到大量恶意访问，消耗云函数资源，开发者可以将云函数访问地址设置为空即可停止 HTTP 访问支持。
 
-
 本文档主要指导您如何在uniCloud web控制台管理和使用云函数URL化。
+
+**使用限制**
+
+- 腾讯云免费服务空间最多只支持配置10个云函数URL化地址
 
 ## 操作步骤
 
@@ -21,7 +27,7 @@
 
 ### 绑定自定义域名
 
-**目前阿里云不支持绑定自定义域名，但是需要手动在【云函数URL化】处开启云函数Url化开关**
+**目前阿里云不支持绑定自定义域名，只能使用其默认提供的域名，但是需要手动在【云函数URL化】处开启云函数Url化开关**
 
 1. 单击左侧菜单栏【云函数】，进入云函数页面。
 2. 单击【云函数URL化】，在弹出的配置窗口中进行配置。
@@ -33,7 +39,13 @@
 >- 单个服务空间可支持被访问的最大 QPS 为5000，单个云函数可支持被访问的最大 QPS 为2000（具体频次受函数并发限制）。
 >- 默认域名可支持被访问的最大 QPS 为200，推荐您绑定自定义域名以获取更大的访问频次。
 
-### 通过 HTTP 访问云函数
+如需要更高的QPS支持，请发邮件到service@dcloud.io申请。
+
+**关于证书内容与私钥**
+
+申请证书时通常会有下载选项，下载到证书之后找到对应Nginx的证书（包含一个crt文件和一个key文件），以文本形式打开crt文件即可看到证书内容，同样的key文件对应着私钥。
+
+### 通过 HTTP URL 方式访问云函数
 
 - 方式一：通过`https://${spaceId}.service.tcloudbase.com/${path}`直接访问函数，其中`${spaceId}`是服务空间 ID，`${path}`是配置的函数触发路径。
 ```sh
@@ -101,7 +113,7 @@ $ curl https://${spaceId}.service.tcloudbase.com/${path}
 
 使用POST请求`https://${spaceId}.service.tcloudbase.com/${functionPath}`，云函数接收到的`event`为请求发送的数据，**uni.request默认content-type为application/json**
 
-```
+```js
 // 以uni.request为例
 uni.request({
   method: 'POST',
@@ -117,6 +129,8 @@ uni.request({
 
 // 云函数收到的event为, 注意如果直接return此格式数据可能会被作为集成响应处理，参考下面的集成响应文档
 ```
+
+```js
 {
     path: '/',
     httpMethod: 'GET',
@@ -130,7 +144,12 @@ uni.request({
     body: '{"a":1,"b":2}',
 }
 ```
-```
+
+**注意**
+
+- 阿里云目前请求与响应有如下限制
+  + 请求Body大小限制，不能超过1M。
+  + 响应Body大小限制，不能超过1M。
 
 
 ### 云函数的返回值
@@ -178,13 +197,13 @@ content-length: 13
 {"foo":"bar"}
 ```
 
-<span id="Integrationresponse"></span>
-#### 返回集成响应
+#### 返回集成响应@Integrationresponse
 
 云函数可以返回如下这样特殊结构的**集成响应**，来自由地控制响应体：
 
 ```json
 {
+    "mpserverlessComposedResponse": true, // 使用阿里云返回集成响应是需要此字段为true
     "isBase64Encoded": true|false,
     "statusCode": httpStatusCode,
     "headers": { "headerName": "headerValue", ... },
@@ -199,6 +218,7 @@ content-length: 13
 ```js
 module.exports.main = function() {
     return {
+        mpserverlessComposedResponse: true, // 使用阿里云返回集成响应是需要此字段为true
         statusCode: 200,
         headers: {
             'content-type': 'text/html'
@@ -225,6 +245,7 @@ content-length: 14
 ```js
 module.exports.main = function() {
     return {
+        mpserverlessComposedResponse: true, // 使用阿里云返回集成响应是需要此字段为true
         statusCode: 200,
         headers: {
             'content-type': 'application/javascript'
@@ -251,6 +272,7 @@ console.log("Hello!")
 ```js
 module.exports.main = function() {
     return {
+        mpserverlessComposedResponse: true, // 使用阿里云返回集成响应是需要此字段为true
         isBase64Encoded: true,
         statusCode: 200,
         headers: {

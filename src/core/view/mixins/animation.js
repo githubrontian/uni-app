@@ -1,7 +1,7 @@
 function converPx (value) {
-  if (/\d+[ur]px$/i.test(value)) {
-    value.replace(/\d+[ur]px$/i, text => {
-      return `${uni.upx2px(parseFloat(text))}px`
+  if (/^-?\d+[ur]px$/i.test(value)) {
+    return value.replace(/(^-?\d+)[ur]px$/i, (text, num) => {
+      return `${uni.upx2px(parseFloat(num))}px`
     })
     // eslint-disable-next-line no-useless-escape
   } else if (/^-?[\d\.]+$/.test(value)) {
@@ -25,7 +25,7 @@ function getStyle (action) {
   const option = action.option
   const transition = option.transition
   const style = {}
-  let transform = []
+  const transform = []
   animates.forEach(animate => {
     let type = animate.type
     let args = [...animate.args]
@@ -73,7 +73,9 @@ function startAnimation (context) {
     }
   }
 
-  animate()
+  setTimeout(() => {
+    animate()
+  }, 0)
 }
 
 export default {

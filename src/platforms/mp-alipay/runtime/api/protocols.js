@@ -1,5 +1,14 @@
+import {
+  isPlainObject
+} from 'uni-shared'
+import navigateTo from 'uni-helpers/navigate-to'
+import redirectTo from '../../../mp-weixin/helpers/redirect-to'
+
 // 不支持的 API 列表
 const todos = [
+  'preloadPage',
+  'unPreloadPage',
+  'loadSubPackage'
   // 'getRecorderManager',
   // 'getBackgroundAudioManager',
   // 'createInnerAudioContext',
@@ -73,6 +82,8 @@ function _handleSystemInfo (result) {
 }
 
 const protocols = { // 需要做转换的 API 列表
+  navigateTo,
+  redirectTo,
   returnValue (methodName, res = {}) { // 通用 returnValue 解析
     if (res.error || res.errorMessage) {
       res.errMsg = `${methodName}:fail ${res.errorMessage || res.error}`
@@ -86,6 +97,7 @@ const protocols = { // 需要做转换的 API 列表
   request: {
     name: my.canIUse('request') ? 'request' : 'httpRequest',
     args (fromArgs) {
+      const method = fromArgs.method || 'GET'
       if (!fromArgs.header) { // 默认增加 header 参数，方便格式化 content-type
         fromArgs.header = {}
       }
@@ -103,8 +115,9 @@ const protocols = { // 需要做转换的 API 列表
           }
         },
         data (data) {
-          // 钉钉在content-type为application/json时，不会自动序列化
-          if (my.dd && headers['content-type'].indexOf('application/json') === 0) {
+          // 钉钉小程序在content-type为application/json时需上传字符串形式data，使用my.dd在真机运行钉钉小程序时不能正确判断
+          if (my.canIUse('saveFileToDingTalk') && method.toUpperCase() === 'POST' && headers['content-type'].indexOf(
+            'application/json') === 0 && isPlainObject(data)) {
             return {
               name: 'data',
               value: JSON.stringify(data)
@@ -212,6 +225,25 @@ const protocols = { // 需要做转换的 API 列表
       apFilePath: 'tempFilePath'
     }
   },
+  getFileInfo: {
+    args: {
+      filePath: 'apFilePath'
+    }
+  },
+  compressImage: {
+    args (fromArgs) {
+      fromArgs.compressLevel = 4
+      if (fromArgs && fromArgs.quality) {
+        fromArgs.compressLevel = Math.floor(fromArgs.quality / 26)
+      }
+      fromArgs.apFilePaths = [fromArgs.src]
+    },
+    returnValue (result) {
+      if (result.apFilePaths && result.apFilePaths.length) {
+        result.tempFilePath = result.apFilePaths[0]
+      }
+    }
+  },
   chooseVideo: {
     // 支付宝小程序文档中未找到（仅在getSetting处提及），但实际可用
     returnValue: {
@@ -259,7 +291,9 @@ const protocols = { // 需要做转换的 API 列表
   getSavedFileInfo: {
     args: {
       filePath: 'apFilePath'
-    },
+    }
+  },
+  getSavedFileList: {
     returnValue (result) {
       if (result.fileList && result.fileList.length) {
         result.fileList.forEach(file => {
@@ -301,21 +335,18 @@ const protocols = { // 需要做转换的 API 列表
   scanCode: {
     name: 'scan',
     args (fromArgs) {
-      if (fromArgs.scanType === 'qrCode') {
-        fromArgs.type = 'qr'
-        return {
-          onlyFromCamera: 'hideAlbum'
+      if (fromArgs.scanType) {
+        switch (fromArgs.scanType[0]) {
+          case 'qrCode':
+            fromArgs.type = 'qr'
+            break
+          case 'barCode':
+            fromArgs.type = 'bar'
+            break
         }
-      } else if (fromArgs.scanType === 'barCode') {
-        fromArgs.type = 'bar'
-        return {
-          onlyFromCamera: 'hideAlbum'
-        }
-      } else {
-        return {
-          scanType: false,
-          onlyFromCamera: 'hideAlbum'
-        }
+      }
+      return {
+        onlyFromCamera: 'hideAlbum'
       }
     },
     returnValue: {
@@ -438,7 +469,7 @@ const protocols = { // 需要做转换的 API 列表
   chooseAddress: {
     name: 'getAddress',
     returnValue (result) {
-      let info = result.result || {}
+      const info = result.result || {}
       result.userName = info.fullname
       result.provinceName = info.prov
       result.cityName = info.city
