@@ -103,7 +103,7 @@ uni.share({
 	provider: "weixin",
 	scene: "WXSceneSession",
 	type: 2,
-	imageUrl: "https://img-cdn-qiniu.dcloud.net.cn/uniapp/images/uni@2x.png",
+	imageUrl: "https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/d8590190-4f28-11eb-b680-7980c8a877b8.png",
 	success: function (res) {
 		console.log("success:" + JSON.stringify(res));
 	},
@@ -126,7 +126,7 @@ uni.share({
 	href: "http://uniapp.dcloud.io/",
 	title: "uni-app分享",
 	summary: "我正在使用HBuilderX开发uni-app，赶紧跟我一起来体验！",
-	imageUrl: "https://img-cdn-qiniu.dcloud.net.cn/uniapp/images/uni@2x.png",
+	imageUrl: "https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/d8590190-4f28-11eb-b680-7980c8a877b8.png",
 	success: function (res) {
 		console.log("success:" + JSON.stringify(res));
 	},
@@ -161,7 +161,7 @@ uni.share({
 	provider: "weixin",
 	scene: "WXSenceTimeline",
 	type: 2,
-	imageUrl: "https://img-cdn-qiniu.dcloud.net.cn/uniapp/images/uni@2x.png",
+	imageUrl: "https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/d8590190-4f28-11eb-b680-7980c8a877b8.png",
 	success: function (res) {
 		console.log("success:" + JSON.stringify(res));
 	},
@@ -183,7 +183,7 @@ uni.share({
 	href: "http://uniapp.dcloud.io/",
 	title: "uni-app分享",
 	summary: "我正在使用HBuilderX开发uni-app，赶紧跟我一起来体验！",
-	imageUrl: "https://img-cdn-qiniu.dcloud.net.cn/uniapp/images/uni@2x.png",
+	imageUrl: "https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/d8590190-4f28-11eb-b680-7980c8a877b8.png",
 	success: function (res) {
 		console.log("success:" + JSON.stringify(res));
 	},
@@ -200,7 +200,7 @@ uni.share({
     provider: 'weixin',
     scene: "WXSceneSession",
     type: 5,
-    imageUrl: 'https://img-cdn-qiniu.dcloud.net.cn/uniapp/app/share-logo@3.png',
+    imageUrl: 'https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/962fc340-4f2c-11eb-bdc1-8bd33eb6adaa.png',
     title: '欢迎体验uniapp',
     miniProgram: {
         id: 'gh_abcdefg',
@@ -229,12 +229,12 @@ uni.share({
 - 微信 appid 申请步骤：[https://ask.dcloud.net.cn/article/208](https://ask.dcloud.net.cn/article/208)。
 - iOS平台微信SDK配置通用链接：[https://ask.dcloud.net.cn/article/36445](https://ask.dcloud.net.cn/article/36445)。
 
-![](https://img.cdn.aliyun.dcloud.net.cn/uni-app/doc/mp-weixin-manifest-share.png)
+![](https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/da6b1be0-4f2c-11eb-8a36-ebb87efcf8c0.png)
 
 ##### 新浪微博分享
 在 manifest.json 的 App SDK 配置里，勾选勾选新浪微博，并填写相关appkey，新浪微博 appkey 申请步骤可参考：[https://ask.dcloud.net.cn/article/209](https://ask.dcloud.net.cn/article/209)。
 
-![](https://img-cdn-qiniu.dcloud.net.cn/uniapp/doc/uni2019022502.png)
+![](https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/db61d7f0-4f2c-11eb-8a36-ebb87efcf8c0.png)
 
 ##### QQ 分享
 在 manifest.json 的 App SDK 配置里，勾选分享到QQ好友，并填写相关appkey，QQ分享 appkey 申请步骤：
@@ -243,7 +243,7 @@ uni.share({
 2. 完成开发者注册；
 3. 创建应用，选择移动 App，填写相关信息，然后等待审核，审核通过后即可得到AppId。
 
-![](https://img-cdn-qiniu.dcloud.net.cn/uniapp/doc/uni2019022503.png)
+![](https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/d97fd180-4f2c-11eb-bdc1-8bd33eb6adaa.png)
 
 这些配置需要打包生效，真机运行仍然是HBuilder基座的设置，可使用[自定义基座包](http://ask.dcloud.net.cn/article/12723)调试。离线打包请参考离线打包文档在原生工程中配置。
 
@@ -282,6 +282,7 @@ uni.share({
 **注意事项**
 
 - Android端当msg参数中设置图片（`imageUrl`属性）时，分享类型自动变为为`image`，在分享时可能只会发送图片（如微信）；没有设置图片时分享类型则认为是文本`text`。
+- Android端高版本无法分析私有路径的图片，只能分享来自相册的图片（使用 uni.chooseImage 选择图像时请设置为原图）。
 - iOS端不同的分享程序对分享内容有要求，如微信分享时必需添加链接地址`href`，否则微信分享失败。 注：iOS8.0及以上系统触发成功回调则表示发送消息成功。
 
 **示例代码**
@@ -349,7 +350,7 @@ App端可调用手机的系统分享，实现所有注册分享的应用的呼�
 
 小程序中用户点击分享后，在 js 中定义 onShareAppMessage 处理函数（和 onLoad 等生命周期函数同级），设置该页面的分享信息。
 
-* 用户点击分享按钮的时候会调用。这个分享按钮可能是小程序右上角原生菜单自带的分享按钮，也可能是开发者在页面中放置的分享按钮（\<button open-type="share">）；
+* 用户点击分享按钮的时候会调用。这个分享按钮可能是小程序右上角原生菜单自带的分享按钮，也可能是开发者在页面中放置的分享按钮（`<button open-type="share">`）；
 * 此事件需要 return 一个Object，用于自定义分享内容。
 
 微信小程序平台的分享管理比较严格，请参考 [小程序分享指引](https://developers.weixin.qq.com/miniprogram/dev/framework/open-ability/share.html)。

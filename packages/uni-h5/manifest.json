@@ -246,6 +246,22 @@
                 "chooseLocation"
             ],
             [
+                "/platforms/h5/view/components/map/index.vue",
+                "Map"
+            ],
+            [
+                "/core/view/components/input/index.vue",
+                "Input"
+            ],
+            [
+                "/core/view/components/scroll-view/index.vue",
+                "ScrollView"
+            ],
+            [
+                "/platforms/h5/service/api/location/get-location.js",
+                "getLocation"
+            ],
+            [
                 "/platforms/h5/components/system-routes/choose-location/index.vue",
                 "ChooseLocation"
             ]
@@ -283,6 +299,15 @@
             [
                 "/core/helpers/protocol/media/choose-image.js",
                 "chooseImage"
+            ]
+        ]
+    ],
+    "chooseFile": [
+        "/platforms/h5/service/api/media/choose-file.js",
+        [
+            [
+                "/core/helpers/protocol/media/choose-file.js",
+                "chooseFile"
             ]
         ]
     ],
@@ -387,34 +412,31 @@
         "/platforms/h5/service/api/device/network-info.js",
         []
     ],
+    "offNetworkStatusChange": [
+        "/platforms/h5/service/api/device/network-info.js",
+        []
+    ],
     "onAccelerometerChange": [
-        "/core/service/api/device/accelerometer.js",
-        [
-            [
-                "/platforms/h5/service/api/device/accelerometer.js",
-                "enableAccelerometer"
-            ]
-        ]
+        "/platforms/h5/service/api/device/accelerometer.js",
+        []
+    ],
+    "offAccelerometerChange": [
+        "/platforms/h5/service/api/device/accelerometer.js",
+        []
     ],
     "startAccelerometer": [
-        "/core/service/api/device/accelerometer.js",
-        [
-            [
-                "/platforms/h5/service/api/device/accelerometer.js",
-                "enableAccelerometer"
-            ]
-        ]
+        "/platforms/h5/service/api/device/accelerometer.js",
+        []
     ],
     "stopAccelerometer": [
-        "/core/service/api/device/accelerometer.js",
-        [
-            [
-                "/platforms/h5/service/api/device/accelerometer.js",
-                "enableAccelerometer"
-            ]
-        ]
+        "/platforms/h5/service/api/device/accelerometer.js",
+        []
     ],
     "onCompassChange": [
+        "/platforms/h5/service/api/device/compass.js",
+        []
+    ],
+    "offCompassChange": [
         "/platforms/h5/service/api/device/compass.js",
         []
     ],
@@ -456,6 +478,10 @@
         []
     ],
     "onKeyboardHeightChange": [
+        "/core/service/api/keyboard/keyboard.js",
+        []
+    ],
+    "offKeyboardHeightChange": [
         "/core/service/api/keyboard/keyboard.js",
         []
     ],
@@ -762,6 +788,30 @@
         []
     ],
     "hideRightWindow": [
+        "/platforms/h5/service/api/ui/windows.js",
+        []
+    ],
+    "getTopWindowStyle": [
+        "/platforms/h5/service/api/ui/windows.js",
+        []
+    ],
+    "getLeftWindowStyle": [
+        "/platforms/h5/service/api/ui/windows.js",
+        []
+    ],
+    "getRightWindowStyle": [
+        "/platforms/h5/service/api/ui/windows.js",
+        []
+    ],
+    "setTopWindowStyle": [
+        "/platforms/h5/service/api/ui/windows.js",
+        []
+    ],
+    "setLeftWindowStyle": [
+        "/platforms/h5/service/api/ui/windows.js",
+        []
+    ],
+    "setRightWindowStyle": [
         "/platforms/h5/service/api/ui/windows.js",
         []
     ],

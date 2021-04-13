@@ -1,154 +1,11 @@
-## 云数据库简介
+云函数中支持对云数据库的全部功能的操作。
 
-`uniCloud`提供了一个 JSON 格式的文档型数据库，数据库中的每条记录都是一个 JSON 格式的对象。一个数据库可以有多个集合（相当于关系型数据中的表），集合可看做一个 JSON 数组，数组中的每个对象就是一条记录，记录的格式是 JSON 对象。
-
-关系型数据库和 JSON 文档型数据库的概念对应关系如下表：
-
-|关系型					|JSON 文档型			|
-|:-							|:-								|
-|数据库 database|数据库 database	|
-|表 table				|集合 collection	|
-|行 row					|记录 record / doc|
-|列 column			|字段 field				|
-
-**云数据库仅支持通过云函数可访问。如需要在客户端访问云数据库，需通过`clientDB`插件。该插件可以将所有数据库操作封装在一个云函数中，大幅提升开发效率，是uniCloud开发者的必备插件，详见：[https://uniapp.dcloud.io/uniCloud/uni-clientDB](https://uniapp.dcloud.io/uniCloud/uni-clientDB)**
-
-**阿里云使用的mongoDB数据库版本为4.0，腾讯云使用的腾讯云自研的文档型数据库（兼容mongoDB 4.0版本）。请注意API的兼容性说明**
-
-如果同时还想连接其他数据库，如mysql/redis，用法可以参考如下插件：
-
-- [云函数连接Mysql数据库示例](https://ext.dcloud.net.cn/plugin?id=1925)
-- [云函数连接Redis数据库示例](https://ext.dcloud.net.cn/plugin?id=1846)
-
-## 获取数据库的引用
-
-```js
-const db = uniCloud.database();
-```
-
-**DBOptions参数说明**
-
-|字段		|类型		|必填	|描述											|平台差异说明	|
-|:-:		|:-:		|:-:	|:-:											|:-:					|
-|spaceId|String	|否		|同一账号下的，服务空间ID	|仅腾讯云支持	|
-
-## 新增集合
-
-如果集合已存在，则报错。
-
-**平台差异说明**
-
-|阿里云	|腾讯云	|
-|----		|----		|
-|×			|√			|
-
-```
-db.createCollection(collectionName)
-```
-
-阿里云的集合需提前在web控制台创建。
-
-## 使用db\_init.json初始化项目数据库@db-init
-
-自`HBuilderX 2.5.11`起`uniCloud`提供了`db_init.json`来方便开发者快速进行数据库的初始化操作，即在HBuilderX工具中，将本地数据直接同步到云数据库中。
-
-这个功能尤其适合插件作者，可以快速初始化集合和数据。
-
-**使用方式**
-- 在`cloudfucntions`目录右键即可创建`db_init.json`，
-- 编写好json内容，在`db_init.json`上右键初始化数据库。
-
-**注意事项**
-- 目前`db_init.json`为同步导入形式，无法导入大量数据，后续会实现异步导入方案。
-
-**db_init.json形式如下**
-
-```
-{
-    "collection_test": { // 集合（表名）
-        "data": [ // 数据
-           {
-                "_id": "da51bd8c5e37ac14099ea43a2505a1a5",
-               "name": "tom"
-           }
-        ],
-        "index": [{ // 索引
-            "IndexName": "index_a", // 索引名称
-            "MgoKeySchema": { // 索引规则
-                "MgoIndexKeys": [{
-                    "Name": "index", // 索引字段
-                    "Direction": "1" // 索引方向，1：ASC-升序，-1：DESC-降序，2dsphere：地理位置
-                }],
-                "MgoIsUnique": false // 索引是否唯一
-            }
-        }]
-    }
-}
-```
-
-## 数据库回档@backup
-
-**此功能暂时只有腾讯云支持**
-
-uniCloud会在每天备份一次数据库，最多保留7天。
-
-**操作说明**
-
-1. 登录[uniCloud后台](https://unicloud-dev.dcloud.net.cn/)
-2. 点击左侧菜单`云数据库 --> 数据库回档`，点击`新建回档`
-3. 选择可回档时间
-4. 选择需要回档的集合（注意：回档后集合不能与现有集合重名，如需对集合重命名可以在集合列表处操作）
-
-![数据库回档](https://img.cdn.aliyun.dcloud.net.cn/uni-app/uniCloud/unicloud-db-backup.jpg)
-
-## 数据导出@export
-
-**此功能暂时只有阿里云支持**
-
-此功能主要用于导出整个集合的数据
-
-**用法**
-
-1. 进入[uniCloud web控制台](https://unicloud.dcloud.net.cn/home)，选择服务空间，或者直接在HBuilderX云函数目录`cloudfunctions`上右键打开uniCloud web控制台
-2. 进入云数据库选择希望导入数据的集合
-3. 点击导出按钮
-4. 选择导出格式，如果选择csv格式还需要选择导出字段
-5. 点击确定按钮等待下载开始即可
-
-**注意**
-
-- 导出的json文件并非一般情况下的json，而是每行一条json数据的文本文件
-- 导出为csv时必须填写字段选项。字段之间使用英文逗号隔开。例如：`_id, name, age, gender`
-- 数据量较大时可能需要等待一段时间才可以开始下载
-
-## 数据导入@import
-
-**此功能暂时只有阿里云支持**
-
-uniCloud提供的`db_init.json`主要是为了对数据库进行初始化，并不适合导入大量数据。与`db_init.json`不同，数据导入功能可以导入大量数据，目前支持导入 CSV、JSON 格式（关于json格式看下面注意事项）的文件数据。
-
-**用法**
-
-1. 进入[uniCloud web控制台](https://unicloud.dcloud.net.cn/home)，选择服务空间，或者直接在HBuilderX云函数目录`cloudfunctions`上右键打开uniCloud web控制台
-2. 进入云数据库选择希望导入数据的集合
-3. 点击导入，选择json文件或csv文件
-4. 选择处理冲突模式（关于处理冲突模式请看下方注意事项）
-5. 点击确定按钮等待导入完成即可
-
-**注意**
-
-- 目前导入文件最大限制为50MB
-- 导入csv时数据类型会丢失，即所有字段均会作为字符串导入
-- 冲突处理模式为设定记录_id冲突时的处理方式，`insert`表示冲突时依旧导入记录但是是新插入一条，`upsert`表示冲突时更新已存在的记录
-- 这里说的json文件并不是标准的json格式，而是形如下面这样每行一个json格式的数据库记录的文件
-  ```json
-  {"a":1}
-  {"a":2}
-  ```
+云函数中不支持`jql`语法，仅支持传统MongoDB的API。
 
 ## 获取集合的引用
 
 ```js
+const db = uniCloud.database();
 // 获取 `user` 集合的引用
 const collection = db.collection('user');
 ```
@@ -175,7 +32,7 @@ const collection = db.collection('user');
 
 ### 记录 Record / Document
 
-通过 `db.collection(collectionName).doc(docId)` 可以获取指定集合上指定 id 的记录的引用，在记录上可以进行以下操作
+通过 `db.collection(collectionName).doc(docId)` 可以获取指定集合上指定 _id 的记录的引用，在记录上可以进行以下操作
 
 | 接口| 说明	|												|
 | ----| ------|----										|
@@ -184,6 +41,9 @@ const collection = db.collection('user');
 |			| remove| 删除记录(触发请求)		|
 | 读	| get		| 获取记录(触发请求)		|
 
+doc(docId)方法的参数只能是字符串，即数据库默认的_id字段。
+
+如需要匹配多个`_id`的记录，应使用where方法。可以在where方法里用in指令匹配一个包含`_id`的数组。
 
 ### 查询筛选指令 Query Command
 
@@ -241,25 +101,21 @@ const collection = db.collection('user');
 
 ### 时间 Date
 
-**使用阿里云时请存储日期字符串或者时间戳，比如`new Date().toISOString()`。数据库存储Date类型数据仅腾讯云支持**
+Date 类型用于表示时间，精确到毫秒，可以用 JavaScript 内置 Date 对象创建。需要特别注意的是，用此方法创建的时间是客户端时间，不是服务端时间。如果需要使用服务端时间，应该用 API 中提供的 serverDate 对象来创建一个服务端当前时间的标记，当使用了 serverDate 对象的请求抵达服务端处理时，该字段会被转换成服务端当前的时间，更棒的是，我们在构造 serverDate 对象时还可通过传入一个有 offset 字段的对象来标记一个与当前服务端时间偏移 offset 毫秒的时间，这样我们就可以达到比如如下效果：指定一个字段为服务端时间往后一个小时。
 
-<!-- 我们推荐无论是腾讯云还是阿里云都以时间戳的方式存储时间字段 -->
+```js
+// 服务端当前时间
+new db.serverDate()
+// 在云函数内使用new Date()和new db.serverDate()效果一样
+```
 
-  Date 类型用于表示时间，精确到毫秒，可以用 JavaScript 内置 Date 对象创建。需要特别注意的是，用此方法创建的时间是客户端时间，不是服务端时间。如果需要使用服务端时间，应该用 API 中提供的 serverDate 对象来创建一个服务端当前时间的标记，当使用了 serverDate 对象的请求抵达服务端处理时，该字段会被转换成服务端当前的时间，更棒的是，我们在构造 serverDate 对象时还可通过传入一个有 offset 字段的对象来标记一个与当前服务端时间偏移 offset 毫秒的时间，这样我们就可以达到比如如下效果：指定一个字段为服务端时间往后一个小时。
-
-  <!-- 那么当我们需要使用客户端时间时，存放 Date 对象和存放毫秒数是否是一样的效果呢？不是的，我们的数据库有针对日期类型的优化，建议大家使用时都用 Date 或 serverDate 构造时间对象。 -->
-
-  ```js
-  //服务端当前时间
-  new db.serverDate()
-  ```
-
-  ```js
-  //服务端当前时间加1S
-  new db.serverDate({
-    offset: 1000
-  })
-  ```
+```js
+//服务端当前时间加1S
+new db.serverDate({
+  offset: 1000
+})
+// 在云函数内使用new Date(Date.now() + 1000)和上面的用法效果一样
+```
   
 如果需要对日期进行比较操作，可以使用聚合操作符将日期进行转化，比如以下示例查询所有time字段在`2020-02-02`以后的记录
   
@@ -281,10 +137,6 @@ exports.main = async (event, context) => {
 ### 地理位置
 
 参考：[GEO地理位置](#GEO地理位置)
-
-### Null
-
-  Null 相当于一个占位符，表示一个字段存在但是值为空。
 
 ## 新增文档@add
 
@@ -331,7 +183,7 @@ let res = await collection.add([{
 
 **Tips**
 
-- 云服务商为阿里云时，若集合不存在，调用add方法会自动创建集合
+- 云服务商为阿里云时，若集合不存在，调用add方法会自动创建集合。注意此方式创建的集合不带索引、表结构，尽量不要依赖此方式创建集合。
 
 方法2： collection.doc().set(data)
 
@@ -343,7 +195,7 @@ let res = await collection.add([{
 
 | 参数 | 类型   | 必填 | 说明                                     |
 | ---- | ------ | ---- | ---------------------------------------- |
-| data | object | 是   | 更新字段的Object，{'name': 'Ben'} _id 非必填|
+| data | object | 是   | 更新字段的Object，{'name': 'Ben'}|
 
 **响应参数**
 
@@ -359,6 +211,9 @@ let res = await collection.doc('doc-id').set({
 });
 ```
 
+**注意**
+
+- 自动生成的_id是自增的，后创建的记录的_id总是大于先生成的_id
 
 ## 查询文档
 
@@ -366,7 +221,13 @@ let res = await collection.doc('doc-id').set({
 
 只有当调用`get()`时才会真正发送查询请求。
 
-注：默认取前100条数据，最大取前100条数据。
+limit，即返回记录的最大数量，默认值为100，也就是不设置limit的情况下默认返回100条数据。
+
+设置limit有最大值，腾讯云限制为最大1000条，阿里云限制为最大500条。
+
+如需查询更多数据，需要分页多次查询。
+
+如果使用clientDB传入getTree参数以返回树形数据也受上面的规则限制，不过此时limit方法仅对根节点生效（大量数据建议使用分层加载，不要使用getTree一次返回所有数据）
 
 **get响应参数**
 
@@ -414,6 +275,64 @@ db.collection('user').where({
 })
 ```
 
+**按照数组内的值查询**
+
+mongoDB内按照数组内的值查询可以使用多种写法，以下面的数据为例
+
+```js
+{
+  arr:[{
+    name: 'item-1',
+  },{
+    name: 'item-2',
+  }]
+}
+
+{
+  arr:[{
+    name: 'item-3',
+  },{
+    name: 'item-4',
+  }]
+}
+```
+
+如果想查询arr内第一个元素的name为item-1的记录可以使用如下写法
+
+```js
+const res = await db.collection('test').where({
+  'arr.0.name': 'item-1'
+})
+
+res = {
+  data:[{
+    arr:[{
+      name: 'item-1',
+    },{
+      name: 'item-2',
+    }]
+  }]
+}
+```
+
+如果想查询arr内某个元素的name为item-1的记录（可以是数组内的任意一条name为item-1）可以使用如下写法
+
+```js
+const res = await db.collection('test').where({
+  'arr.name': 'item-1'
+})
+
+res = {
+  data:[{
+    arr:[{
+      name: 'item-1',
+    },{
+      name: 'item-2',
+    }]
+  }]
+}
+```
+
 ### 获取查询数量
 
 collection.count()
@@ -427,26 +346,17 @@ let res = await db.collection('goods').where({
 }).count()
 ```
 
-**注意**
-
-使用阿里云时，count必须搭配where使用，此问题阿里云正在修复。如果要count所有记录可以使用一个必然满足的条件，比如下面这样：
-
-```js
-const dbCmd = db.command
-let res = await db.collection('goods').where({
-  _db: dbCmd.exists(true)
-}).count()
-```
-
 响应参数
 
 | 字段      | 类型    | 必填 | 说明                     |
 | --------- | ------- | ---- | ------------------------ |
-| total     | Integer | 否   | 计数结果                 |
+| total     | Number | 否   | 计数结果                 |
 
+**注意：**
 
+- 数据量很大的情况下，带条件运算count全表的性能会很差，尽量使用其他方式替代，比如新增一个字段专门用来存放总数。不加条件时count全表不存在性能问题。
 
-### 设置记录数量
+### 设置记录数量@limit
 
 collection.limit()
 
@@ -454,13 +364,17 @@ collection.limit()
 
 | 参数  | 类型    | 必填 | 说明           |
 | ----- | ------- | ---- | -------------- |
-| value | Integer | 是   | 返回的数据条数 |
+| value | Number | 是   | 返回的数据条数 |
 
 使用示例
 
 ```js
 let res = await collection.limit(1).get() // 只返回第一条记录
 ```
+
+**注意**
+
+- limit不设置的情况下默认返回100条数据；设置limit有最大值，腾讯云限制为最大1000条，阿里云限制为最大500条。
 
 ### 设置起始位置
 
@@ -470,13 +384,15 @@ collection.skip(value)
 
 | 参数  | 类型    | 必填 | 说明           |
 | ----- | ------- | ---- | -------------- |
-| value | Integer | 是   | 跳过指定的位置，从位置之后返回数据 |
+| value | Number | 是   | 跳过指定的位置，从位置之后返回数据 |
 
 使用示例
 
 ```js
 let res = await collection.skip(4).get()
 ```
+
+**注意：数据量很大的情况下，skip性能会很差，尽量使用其他方式替代，参考：[skip性能优化](uniCloud/db-performance.md?id=skip)**
 
 ### 对结果排序
 
@@ -500,6 +416,10 @@ collection.orderBy(field, orderType)
 let res = await collection.orderBy("name", "asc").get()
 ```
 
+**注意**
+
+- 排序字段存在多个重复的值时排序后的分页结果，可能会出现某条记录在上一页出现又在下一页出现的情况。这时候可以通过指定额外的排序条件比如`.orderBy("name", "asc").orderBy("_id", "asc")`来规避这种情况。
+
 ### 指定返回字段
 
 collection.field()
@@ -515,9 +435,13 @@ collection.field()
 使用示例
 
 ```js
-collection.field({ 'age': true }) //只返回age字段，其他字段不返回
+collection.field({ 'age': true }) //只返回age字段、_id字段，其他字段不返回
 ```
-备注：只能指定要返回的字段或者不要返回的字段。即{'a': true, 'b': false}是一种错误的参数格式
+
+**注意**
+
+- field内指定是否返回某字段时，不可混用true/false。即{'a': true, 'b': false}是一种错误的参数格式
+- 只有使用{ '_id': false }明确指定不要返回_id时才会不返回_id字段，否则_id字段一定会返回。
 
 ### 查询指令
 
@@ -971,6 +895,131 @@ db.collection('articles').where({
 })
 ```
 
+### 查询数组字段@querywitharr
+
+假设数据表class内有以下数据，可以使用下面两种方式查询数组内包含指定值
+
+```js
+{
+  "_id": "1",
+  "students": ["li","wang"]
+}
+{
+  "_id": "2",
+  "students": ["wang","li"]
+}
+{
+  "_id": "3",
+  "students": ["zhao","qian"]
+}
+```
+
+#### 指定下标查询
+
+```js
+const index = 1
+const res = await db.collection('class').where({
+  ['students.' + index]: 'wang'
+})
+.get()
+```
+
+```js
+// 查询结果如下
+{
+  data: [{
+    "_id": "1",
+    "students": ["li","wang"]
+  }]
+}
+```
+
+#### 不指定下标查询
+
+```js
+const res = await db.collection('class').where({
+  students: 'wang'
+})
+.get()
+```
+
+查询结果如下
+
+```js
+{
+  data: [{
+    "_id": "1",
+    "students": ["li","wang"]
+  },{
+    "_id": "1",
+    "students": ["wang","li"]
+  }]
+}
+```
+
+#### 数组内是对象
+
+如果将上面class内的数据改为如下形式
+
+```js
+{
+  "_id": "1",
+  "students": [{
+    name: "li"
+  },{
+    name: "wang"
+  }]
+}
+{
+  "_id": "2",
+  "students": [{
+    name: "wang"
+  },{
+    name: "li"
+  }]
+}
+{
+  "_id": "3",
+  "students": [{
+    name: "zhao"
+  },{
+    name: "qian"
+  }]
+}
+```
+
+不指定下标查询的写法可以修改为
+
+```js
+const res = await db.collection('class').where({
+  'students.name': 'wang'
+})
+.get()
+```
+
+查询结果如下
+
+```js
+{
+  data: [{
+    "_id": "1",
+    "students": [{
+      name: "li"
+    },{
+      name: "wang"
+    }]
+  },
+  {
+    "_id": "2",
+    "students": [{
+      name: "wang"
+    },{
+      name: "li"
+    }]
+  }]
+}
+```
+
 ## 删除文档
 
 **方式1 通过指定文档ID删除**
@@ -1007,14 +1056,31 @@ let res = await collection.where({
 
 | 字段      | 类型    | 必填 | 说明                     |
 | --------- | ------- | ---- | ------------------------ |
-| deleted   | Integer | 否   | 删除的记录数量              |
+| deleted   | Number | 否   | 删除的记录数量              |
 
+示例：判断删除成功或失败，打印删除的记录数量
+
+```js
+const db = uniCloud.database();
+db.collection("table1").doc("5f79fdb337d16d0001899566").remove()
+	.then((res) => {
+		console.log("删除成功，删除条数为: ",res.deleted);
+	})
+	.catch((err) => {
+		console.log( err.message )
+	})
+	.finally(() => {
+		
+	})
+```
 
 ## 更新文档
 
 ### 更新指定文档
 
 collection.doc().update(Object data)
+
+> 未使用set、remove更新操作符的情况下，此方法不会删除字段，仅将更新数据和已有数据合并。
 
 **参数说明**
 
@@ -1089,7 +1155,7 @@ collection.doc().set()
 
 **注意：**
 
-- 此方法会覆写已有字段，需注意与`update`表现不同，比如以下示例执行`set`之后`follow`字段会被删除
+> 此方法会覆写已有字段，需注意与`update`表现不同，比如以下示例执行`set`之后`follow`字段会被删除
 
 ```js
 let res = await collection.doc('doc-id').set({
@@ -1693,6 +1759,205 @@ let res = await db.collection('user').where({
 }).get()
 ```
 
+## 事务
+
+事务通常用来在某个数据库操作失败之后进行回滚。
+
+> 事务因为要锁行，是有时间限制的。从事务开始到事务提交/回滚，时间不可超过10s。
+
+> 事务因为要锁行，是有时间限制的。从事务开始到事务提交/回滚，时间不可超过10s。
+
+### runTransaction
+
+**阿里云不支持此用法，请换成startTransaction以使用事务**
+
+发起事务。与`startTransaction`作用类似，接收参数类型不同
+
+**`runTransaction` 的形式如下：**
+
+```javascript
+db.runTransaction(callback: function, times: number)
+```
+
+**参数**
+
+|参数			|类型			|说明																																										|
+|---			|---			|---																																										|
+|callback	|Function	|事务执行函数，需为 async 异步函数或返回 Promise 的函数																	|
+|times		|Number		|事务执行最多次数，默认 3 次，成功后不重复执行，只有事务冲突时会重试，其他异常时不会重试|
+
+**返回值**
+
+`runTransaction`返回一个`Promise`，此`Promise.resolve`的结果为`callback`事务执行函数的返回值，`reject` 的结果为事务执行过程中抛出的异常或者是 `transaction.rollback` 传入的值
+
+**callback 事务执行函数的说明**
+
+事务执行函数由开发者传入，函数接收一个参数 transaction，其上提供 collection 方法和 rollback 方法。collection 方法用于取数据库集合记录引用进行操作，rollback 方法用于在不想继续执行事务时终止并回滚事务。
+
+事务执行函数必须为 `async` 异步函数或返回 `Promise` 的函数，当事务执行函数返回时，uniCloud 会认为用户逻辑已完成，自动提交（`commit`）事务，因此务必确保用户事务逻辑完成后才在 `async` 异步函数中返回或 `resolve Promise`。
+
+事务执行函数可能会被执行多次，在内部发现事务冲突时会自动重复执行，如果超过设定的执行次数上限，会报错退出。
+
+在事务执行函数中发生的错误，都会认为事务执行失败而抛错。
+
+事务执行函数返回的值会作为 `runTransaction` 返回的 `Promise resolve` 的值，在函数中抛出的异常会作为 `runTransaction` 返回的 `Promise reject` 的值，如果事务执行函数中调用了 `transaction.rollback`，则传入 `rollback` 函数的值会作为 `runTransaction` 返回的 `Promise reject` 的值。
+
+**限制**
+
+事务操作时为保障效率和并发性，只允许进行单记录操作，不允许进行批量操作，但可以在一个事务进行多次数据库操作。
+
+- 对于修改和删除仅支持使用doc方法，不支持使用where方法。
+- 新增时使用add方法一次只可以新增单条，不可新增多条，即不支持在add方法内传入数组
+- 腾讯云没有限制where的使用，但是使用where修改或删除多条会导致无法回滚
+
+**注意事项**
+
+- 开发者提供的事务执行函数正常返回时，uniCloud 会自动提交（`commit`）事务，请勿在事务执行函数内调用 `transaction.commit` 方法，该方法仅在通过 `db.startTransaction` 进行事务操作时使用
+- 请注意transaction.doc().get()返回的data不是数组形式
+
+**示例代码**
+
+两个账户之间进行转账的简易示例
+
+```javascript
+const db = uniCloud.database()
+const dbCmd = db.command
+exports.main = async (event) => {
+  try {
+    const result = await db.runTransaction(async transaction => {
+      const aaaRes = await transaction.collection('account').doc('aaa').get()
+      const bbbRes = await transaction.collection('account').doc('bbb').get()
+      if(aaaRes.data && bbbRes.data) {
+        try {
+          const updateAAARes = await transaction.collection('account').doc('aaa').update({
+            amount: dbCmd.inc(-10)
+          })
+
+          const updateBBBRes = await transaction.collection('account').doc('bbb').update({
+            amount: dbCmd.inc(10)
+          })
+          const aaaEndRes = await transaction.collection('account').doc('aaa').get()
+          if (aaaEndRes.data.amount < 0) { // 请注意transaction.doc().get()返回的data不是数组形式
+            await transaction.rollback(-100)
+          }
+          // 会作为 runTransaction resolve 的结果返回
+          return {
+            aaaAccount: aaaEndRes.data.amount,
+          }
+        } catch(e) {
+          // 会作为 runTransaction reject 的结果出去
+          await transaction.rollback(-100)
+        }
+      } else {
+        await transaction.rollback(-100)
+      }
+    })
+
+    return {
+      success: true,
+      aaaAccount: result.aaaAccount,
+    }
+  } catch (e) {
+    console.error(`transaction error`, e)
+
+    return {
+      success: false,
+      error: e
+    }
+  }
+}
+```
+
+### startTransaction
+
+发起事务。与`runTransaction`作用类似，接收参数类型不同
+
+**`startTransaction` 形式如下**
+
+```javascript
+// 与runTransaction不同，startTransaction不接收参数
+db.startTransaction()
+```
+
+**返回值**
+
+返回一个`Promise`，此`Promise resolve`的结果为事务操作对象（**注意这里与runTransaction的区别**），其上可通过 `collection API` 操作数据库，通过 `commit`（**使用`startTransaction`需要主动`commit`**） 或 `rollback` 来结束或终止事务。
+
+**限制**
+
+事务操作时为保障效率和并发性，只允许进行单记录操作，不允许进行批量操作，但可以在一个事务进行多次数据库操作。
+
+- 对于修改和删除仅支持使用doc方法，不支持使用where方法。
+- 新增时使用add方法一次只可以新增单条，不可新增多条，即不支持在add方法内传入数组
+- 腾讯云没有限制where的使用，但是使用where修改或删除多条会导致无法回滚
+
+**注意**
+
+- 请注意transaction.doc().get()返回的data不是数组形式
+
+**示例代码**
+
+两个账户之间进行转账的简易示例
+
+```javascript
+const db = uniCloud.database()
+const dbCmd = db.command
+
+exports.main = async (event) => {
+  const transaction = await db.startTransaction()
+  try {
+
+    const aaaRes = await transaction.collection('account').doc('aaa').get()
+    const bbbRes = await transaction.collection('account').doc('bbb').get()
+
+    if (aaaRes.data && bbbRes.data) {
+      const updateAAARes = await transaction.collection('account').doc('aaa').update({
+        amount: dbCmd.inc(-10)
+      })
+
+      const updateBBBRes = await transaction.collection('account').doc('bbb').update({
+        amount: dbCmd.inc(10)
+      })
+      
+      const aaaEndRes = await transaction.collection('account').doc('aaa').get()
+      if (aaaEndRes.data.amount < 0) { // 请注意transaction.doc().get()返回的data不是数组形式
+        await transaction.rollback(-100)
+        return {
+          success: false,
+          error: `rollback`,
+          rollbackCode: -100,
+        }
+      } else {
+        await transaction.commit()
+        console.log(`transaction succeeded`)
+
+        return {
+          success: true,
+          aaaAccount: aaaRes.data.amount - 10,
+        }
+      }
+
+    } else {
+
+      return {
+        success: false,
+        error: `rollback`,
+        rollbackCode: -100,
+      }
+    }
+  } catch (e) {
+    await transaction.rollback()
+    console.error(`transaction error`, e)
+
+    return {
+      success: false,
+      error: e
+    }
+  }
+}
+```
+
+
 <!-- ## 数据库实时推送
 
 监听指定集合中符合查询条件的文档，通过onchange回调获得文档的变化详情
@@ -1734,179 +1999,8 @@ let res = await db.collection('user').where({
 ```
  -->
 
-## 事务
 
-**目前仅腾讯云支持事务，阿里云暂不支持**
-
-事务通常用来在某个数据库操作失败之后进行回滚。
-
-### runTransaction
-
-发起事务。与`startTransaction`作用类似，接收参数类型不同
-
-**`runTransaction` 的形式如下：**
-
-```javascript
-db.runTransaction(callback: function, times: number)
-```
-
-**参数**
-
-|参数			|类型			|说明																																										|
-|---			|---			|---																																										|
-|callback	|Function	|事务执行函数，需为 async 异步函数或返回 Promise 的函数																	|
-|times		|Number		|事务执行最多次数，默认 3 次，成功后不重复执行，只有事务冲突时会重试，其他异常时不会重试|
-
-**返回值**
-
-`runTransaction`返回一个`Promise`，此`Promise.resolve`的结果为`callback`事务执行函数的返回值，`reject` 的结果为事务执行过程中抛出的异常或者是 `transaction.rollback` 传入的值
-
-**callback 事务执行函数的说明**
-
-事务执行函数由开发者传入，函数接收一个参数 transaction，其上提供 collection 方法和 rollback 方法。collection 方法用于取数据库集合记录引用进行操作，rollback 方法用于在不想继续执行事务时终止并回滚事务。
-
-事务执行函数必须为 `async` 异步函数或返回 `Promise` 的函数，当事务执行函数返回时，uniCloud 会认为用户逻辑已完成，自动提交（`commit`）事务，因此务必确保用户事务逻辑完成后才在 `async` 异步函数中返回或 `resolve Promise`。
-
-事务执行函数可能会被执行多次，在内部发现事务冲突时会自动重复执行，如果超过设定的执行次数上限，会报错退出。
-
-在事务执行函数中发生的错误，都会认为事务执行失败而抛错。
-
-事务执行函数返回的值会作为 `runTransaction` 返回的 `Promise resolve` 的值，在函数中抛出的异常会作为 `runTransaction` 返回的 `Promise reject` 的值，如果事务执行函数中调用了 `transaction.rollback`，则传入 `rollback` 函数的值会作为 `runTransaction` 返回的 `Promise reject` 的值。
-
-**限制**
-
-事务操作时为保障效率和并发性，只允许进行单记录操作，不允许进行批量操作，但可以在一个事务进行多次数据库操作。
-
-**注意事项**
-
-开发者提供的事务执行函数正常返回时，uniCloud 会自动提交（`commit`）事务，请勿在事务执行函数内调用 `transaction.commit` 方法，该方法仅在通过 `db.startTransaction` 进行事务操作时使用
-
-**示例代码**
-
-两个账户之间进行转账的简易示例
-
-```javascript
-const db = uniCloud.database()
-const dbCmd = db.command
-exports.main = async (event) => {
-  try {
-    const result = await db.runTransaction(async transaction => {
-      const aaaRes = await transaction.collection('account').doc('aaa').get()
-      const bbbRes = await transaction.collection('account').doc('bbb').get()
-
-      if (aaaRes.data && bbbRes.data) {
-        try {
-          const updateAAARes = await transaction.collection('account').doc('aaa').update({
-            amount: dbCmd.inc(-10)
-          })
-
-          const updateBBBRes = await transaction.collection('account').doc('bbb').update({
-            amount: dbCmd.inc(10)
-          })
-
-          console.log(`transaction succeeded`)
-
-          // 会作为 runTransaction resolve 的结果返回
-          return {
-            aaaAccount: aaaRes.data.amount - 10,
-          }
-        } catch(e) {
-          // 会作为 runTransaction reject 的结果出去
-          await transaction.rollback(-100)
-        }
-      } else {
-        // 会作为 runTransaction reject 的结果出去
-        await transaction.rollback(-100)
-      }
-    })
-
-    return {
-      success: true,
-      aaaAccount: result.aaaAccount,
-    }
-  } catch (e) {
-    console.error(`transaction error`, e)
-
-    return {
-      success: false,
-      error: e
-    }
-  }
-}
-```
-
-### startTransaction
-
-发起事务。与`runTransaction`作用类似，接收参数类型不同
-
-**`startTransaction` 形式如下**
-
-```javascript
-// 与runTransaction不同，startTransaction不接收参数
-db.startTransaction()
-```
-
-**返回值**
-
-返回一个`Promise`，此`Promise resolve`的结果为事务操作对象（**注意这里与runTransaction的区别**），其上可通过 `collection API` 操作数据库，通过 `commit`（**使用`startTransaction`需要主动`commit`**） 或 `rollback` 来结束或终止事务。
-
-**限制**
-
-事务操作时为保障效率和并发性，只允许进行单记录操作，不允许进行批量操作，但可以在一个事务进行多次数据库操作。
-
-**示例代码**
-
-两个账户之间进行转账的简易示例
-
-```javascript
-const db = uniCloud.database()
-const dbCmd = db.command
-
-exports.main = async (event) => {
-  const transaction = await db.startTransaction()
-  try {
-
-    const aaaRes = await transaction.collection('account').doc('aaa').get()
-    const bbbRes = await transaction.collection('account').doc('bbb').get()
-
-    if (aaaRes.data && bbbRes.data) {
-      const updateAAARes = await transaction.collection('account').doc('aaa').update({
-        amount: dbCmd.inc(-10)
-      })
-
-      const updateBBBRes = await transaction.collection('account').doc('bbb').update({
-        amount: dbCmd.inc(10)
-      })
-
-      await transaction.commit()
-
-      console.log(`transaction succeeded`)
-
-      return {
-        success: true,
-        aaaAccount: aaaRes.data.amount - 10,
-      }
-    } else {
-
-      return {
-        success: false,
-        error: `rollback`,
-        rollbackCode: -100,
-      }
-    }
-  } catch (e) {
-    await transaction.rollback()
-    console.error(`transaction error`, e)
-
-    return {
-      success: false,
-      error: e
-    }
-  }
-}
-```
-
-## 聚合操作
+## 聚合操作@aggregate
 
 有时候我们需要对数据进行分析操作，比如一些统计操作、联表查询等，这个时候简单的查询操作就搞不定这些需求，因此就需要使用聚合操作来完成。
 
@@ -2168,7 +2262,7 @@ let res = await db.collection('items').aggregate()
     boundaries: [0, 50, 100],
     default: 'other',
     output: {
-      count: $.sum(),
+      count: $.sum(1),
       ids: $.push('$_id')
     }
   })
@@ -2197,7 +2291,7 @@ let res = await db.collection('items').aggregate()
   },
   {
     "_id": "other",
-    "count": 22,
+    "count": 1,
     "ids": [
       "5"
     ]
@@ -2695,7 +2789,7 @@ let res = await db.collection('avatar').aggregate()
     "region": "asia",
     "maxScore": 100
   },
-  "totalCoins": 100
+  "totalCoins": 40
 }
 {
   "_id": {
@@ -2758,8 +2852,8 @@ let res = await db.collection('items').aggregate()
 返回结果如下：
 ```js
 {
-  "_id": "3",
-  "price": 20
+  "_id": "2",
+  "price": 50
 }
 {
   "_id": "4",
@@ -2871,7 +2965,7 @@ books 集合有以下记录：
 ```
 以下聚合操作可以通过一个相等匹配条件连接 `orders` 和 `books` 集合，匹配的字段是 `orders` 集合的 `book` 字段和 `books` 集合的 title 字段：
 ```js
-const db = cloud.database()
+const db = uniCloud.database()
 let res = await db.collection('orders').aggregate()
   .lookup({
     from: 'books',
@@ -3075,6 +3169,7 @@ let res = await db.collection('orders').aggregate()
     "_id": 4,
     "title": "novel 1",
     "author": "author 1",
+    "time": 1564456048486,
     "category": "novel",
     "stock": 10,
     "book": "novel 1",
@@ -3939,20 +4034,8 @@ let res = await db.collection('todo').where({
   tags: 'cloud'
 }).get()
 ```
-通常需要显示使用 `and` 是用在有跨字段或操作的时候，如以下表示 “progress 字段大于 50 或 tags 字段等于 cloud 或 tags 数组字段（如果 tags 是数组）中含有 cloud”：  
 
- 
-```js
-const dbCmd = db.command
-let res = await db.collection('todo').where(dbCmd.and([
-  dbCmd.or({
-    progress: dbCmd.gt(50)
-  }),
-  dbCmd.or({
-    tags: 'cloud'
-  })
-])).get()
-```
+通常需要显示使用 `and` 是用在有跨字段或操作的时候
 
 
 **2. 用在字段查询条件**
@@ -4232,10 +4315,7 @@ const dbCmd = db.command
 let res = await db.collection('todos').where({
   progress: dbCmd.lt(50)
 })
-.get({
-  success: console.log,
-  fail: console.error
-})
+.get()
 ```
 
 #### lte
@@ -4252,10 +4332,7 @@ const dbCmd = db.command
 let res = await db.collection('todos').where({
   progress: dbCmd.lte(50)
 })
-.get({
-  success: console.log,
-  fail: console.error
-})
+.get()
 ```
 
 #### gt
@@ -4272,10 +4349,7 @@ const dbCmd = db.command
 let res = await db.collection('todos').where({
   progress: dbCmd.gt(50)
 })
-.get({
-  success: console.log,
-  fail: console.error
-})
+.get()
 ```
 
 #### gte
@@ -4292,10 +4366,7 @@ const dbCmd = db.command
 let res = await db.collection('todos').where({
   progress: dbCmd.gte(50)
 })
-.get({
-  success: console.log,
-  fail: console.error
-})
+.get()
 ```
 
 #### in
@@ -4312,10 +4383,7 @@ const dbCmd = db.command
 let res = await db.collection('todos').where({
   progress: dbCmd.in([0, 100])
 })
-.get({
-  success: console.log,
-  fail: console.error
-})
+.get()
 ```
 
 #### nin
@@ -4332,10 +4400,7 @@ const dbCmd = db.command
 let res = await db.collection('todos').where({
   progress: dbCmd.nin([0, 100])
 })
-.get({
-  success: console.log,
-  fail: console.error
-})
+.get()
 ```
 
 ### 查询·字段操作符
@@ -5124,13 +5189,15 @@ let res = await db.collection('todos').doc('doc-id').update({
 })
 ```
 
-## 聚合操作符@aggregate-operator
+## 数据库运算方法@aggregate-operator
+
+**等同于mongoDB聚合操作符概念**
 
 ### 算术操作符
 
 #### abs
 
-聚合操作符。返回一个数字的绝对值。  
+返回一个数字的绝对值。  
 
 ##### API 说明
 
@@ -5179,7 +5246,7 @@ let res = await db.collection('ratings').aggregate()
 
 #### add
 
-聚合操作符。将数字相加或将数字加在日期上。如果数组中的其中一个值是日期，那么其他值将被视为毫秒数加在该日期上。  
+将数字相加或将数字加在日期上。如果数组中的其中一个值是日期，那么其他值将被视为毫秒数加在该日期上。  
 
       
 #####  API 说明
@@ -5252,7 +5319,7 @@ let res = await db.collection('staff').aggregate()
 
 #### ceil
 
-聚合操作符。向上取整，返回大于或等于给定数字的最小整数。  
+向上取整，返回大于或等于给定数字的最小整数。  
 
       
 #####  API 说明
@@ -5296,7 +5363,7 @@ let res = await db.collection('sales').aggregate()
 
 #### divide
 
-聚合操作符。传入被除数和除数，求商。  
+传入被除数和除数，求商。  
 
       
 #####  API 说明
@@ -5340,7 +5407,7 @@ let res = await db.collection('railroads').aggregate()
 
 #### exp
 
-聚合操作符。取 e（自然对数的底数，欧拉数） 的 n 次方。  
+取 e（自然对数的底数，欧拉数） 的 n 次方。  
 
       
 #####  API 说明
@@ -5382,7 +5449,7 @@ let res = await db.collection('math').aggregate()
 
 #### floor
 
-聚合操作符。向下取整，返回大于或等于给定数字的最小整数。  
+向下取整，返回大于或等于给定数字的最小整数。  
 
       
 #####  API 说明
@@ -5426,7 +5493,7 @@ let res = await db.collection('sales').aggregate()
 
 #### ln
 
-聚合操作符。计算给定数字在自然对数值。  
+计算给定数字在自然对数值。  
 
       
 #####  API 说明
@@ -5458,7 +5525,7 @@ db.command.aggregate.ln(<number>)
 
 #### log
 
-聚合操作符。计算给定数字在给定对数底下的 log 值。  
+计算给定数字在给定对数底下的 log 值。  
 
       
 #####  API 说明
@@ -5487,7 +5554,7 @@ db.command.aggregate.log([<number>, <base>])
  
 ```js
 const $ = db.command.aggregate
-let res = await db.collection('staff').aggregate()
+let res = await db.collection('curve').aggregate()
   .project({
     log: $.log(['$x', 2])
   })
@@ -5504,7 +5571,7 @@ let res = await db.collection('staff').aggregate()
 
 #### log10
 
-聚合操作符。计算给定数字在对数底为 10 下的 log 值。  
+计算给定数字在对数底为 10 下的 log 值。  
 
       
 #####  API 说明
@@ -5536,7 +5603,7 @@ db.command.aggregate.log(<number>)
 
 #### mod
 
-聚合操作符。取模运算，取数字取模后的值。  
+取模运算，取数字取模后的值。  
 
       
 #####  API 说明
@@ -5580,7 +5647,7 @@ let res = await db.collection('shopping').aggregate()
 
 #### multiply
 
-聚合操作符。取传入的数字参数相乘的结果。  
+取传入的数字参数相乘的结果。  
 
       
 #####  API 说明
@@ -5625,7 +5692,7 @@ let res = await db.collection('fruits').aggregate()
 
 #### pow
 
-聚合操作符。求给定基数的指数次幂。  
+求给定基数的指数次幂。  
 
       
 #####  API 说明
@@ -5669,7 +5736,7 @@ let res = await db.collection('stats').aggregate()
 
 #### sqrt
 
-聚合操作符。求平方根。  
+求平方根。  
 
       
 #####  API 说明
@@ -5713,7 +5780,7 @@ let res = await db.collection('triangle').aggregate()
 
 #### subtract
 
-聚合操作符。将两个数字相减然后返回差值，或将两个日期相减然后返回相差的毫秒数，或将一个日期减去一个数字返回结果的日期。  
+将两个数字相减然后返回差值，或将两个日期相减然后返回相差的毫秒数，或将一个日期减去一个数字返回结果的日期。  
 
       
 #####  API 说明
@@ -5757,7 +5824,7 @@ let res = await db.collection('scores').aggregate()
 
 #### trunc
 
-聚合操作符。将数字截断为整形。  
+将数字截断为整形。  
 
       
 #####  API 说明
@@ -5801,7 +5868,7 @@ let res = await db.collection('scores').aggregate()
 
 #### arrayElemAt
 
-聚合操作符。返回在指定数组下标的元素。  
+返回在指定数组下标的元素。  
 
       
 #####  API 说明
@@ -5811,7 +5878,7 @@ let res = await db.collection('scores').aggregate()
 ```js
 db.command.aggregate.arrayElemAt([<array>, <index>])
 ```
-`<array>` 可以是任意解析为数字的表达式。  
+`<array>` 可以是任意解析为数组的表达式。  
 
  `<index>` 可以是任意解析为整形的表达式。如果是正数，`arrayElemAt` 返回在 `index` 位置的元素，如果是负数，`arrayElemAt` 返回从数组尾部算起的 `index` 位置的元素。  
 
@@ -5848,7 +5915,7 @@ let res = await db.collection('exams').aggregate()
 
 #### arrayToObject
 
-聚合操作符。将一个数组转换为对象。  
+将一个数组转换为对象。  
 
      
 #####  API 说明
@@ -5908,7 +5975,7 @@ let res = await db.collection('shops').aggregate()
 
 #### concatArrays
 
-聚合操作符。将多个数组拼接成一个数组。  
+将多个数组拼接成一个数组。  
 
       
 #####  API 说明
@@ -5916,7 +5983,7 @@ let res = await db.collection('shops').aggregate()
 
  
 ```js
-db.command.aggregate.arrayToObject([ <array1>, <array2>, ... ])
+db.command.aggregate.concatArrays([ <array1>, <array2>, ... ])
 ```
 参数可以是任意解析为数组的表达式。  
 
@@ -5950,7 +6017,7 @@ let res = await db.collection('items').aggregate()
 
 #### filter
 
-聚合操作符。根据给定条件返回满足条件的数组的子集。  
+根据给定条件返回满足条件的数组的子集。  
 
      
 #####  API 说明
@@ -6017,7 +6084,7 @@ let res = await db.collection('fruits').aggregate()
 
 #### in
 
-聚合操作符。给定一个值和一个数组，如果值在数组中则返回 `true`，否则返回 `false`。  
+给定一个值和一个数组，如果值在数组中则返回 `true`，否则返回 `false`。  
 
       
 #####  API 说明
@@ -6063,7 +6130,7 @@ let res = await db.collection('price').aggregate()
 
 #### indexOfArray
 
-聚合操作符。在数组中找出等于给定值的第一个元素的下标，如果找不到则返回 -1。  
+在数组中找出等于给定值的第一个元素的下标，如果找不到则返回 -1。  
 
       
 #####  API 说明
@@ -6122,7 +6189,7 @@ let res = await db.collection('stats').aggregate()
 
 #### isArray
 
-聚合操作符。判断给定表达式是否是数组，返回布尔值。  
+判断给定表达式是否是数组，返回布尔值。  
 
       
 #####  API 说明
@@ -6176,7 +6243,7 @@ let res = await db.collection('stats').aggregate()
 
 #### map
 
-聚合操作符。类似 JavaScript Array 上的 `map` 方法，将给定数组的每个元素按给定转换方法转换后得出新的数组。  
+类似 JavaScript Array 上的 `map` 方法，将给定数组的每个元素按给定转换方法转换后得出新的数组。  
 
      
 #####  API 说明
@@ -6239,7 +6306,7 @@ let res = await db.collection('stats').aggregate()
 
 #### objectToArray
 
-聚合操作符。将一个对象转换为数组。方法把对象的每个键值对都变成输出数组的一个元素，元素形如 `{ k: <key>, v: <value> }`。  
+将一个对象转换为数组。方法把对象的每个键值对都变成输出数组的一个元素，元素形如 `{ k: <key>, v: <value> }`。  
 
      
 #####  API 说明
@@ -6279,7 +6346,7 @@ let res = await db.collection('items').aggregate()
 
 #### range
 
-聚合操作符。返回一组生成的序列数字。给定开始值、结束值、非零的步长，`range` 会返回从开始值开始逐步增长、步长为给定步长、但不包括结束值的序列。  
+返回一组生成的序列数字。给定开始值、结束值、非零的步长，`range` 会返回从开始值开始逐步增长、步长为给定步长、但不包括结束值的序列。  
 
       
 #####  API 说明
@@ -6318,12 +6385,12 @@ db.collection('stats').aggregate()
  
 ```js
 { "_id": 1, "points": [0, 10, 20, 30, 40, 50] }
-{ "_id": 2, "points": [0, 10, 20] }
+{ "_id": 2, "points": [0, 10, 20, 30] }
 ```
 
 #### reduce
 
-聚合操作符。类似 JavaScript 的 `reduce` 方法，应用一个表达式于数组各个元素然后归一成一个元素。  
+类似 JavaScript 的 `reduce` 方法，应用一个表达式于数组各个元素然后归一成一个元素。  
 
      
 #####  API 说明
@@ -6411,7 +6478,7 @@ let res = await db.collection('player').aggregate()
 
 #### reverseArray
 
-聚合操作符。返回给定数组的倒序形式。  
+返回给定数组的倒序形式。  
 
      
 #####  API 说明
@@ -6454,7 +6521,7 @@ let res = await db.collection('stats').aggregate()
 
 #### size
 
-聚合操作符。返回数组长度。  
+返回数组长度。  
 
      
 #####  API 说明
@@ -6480,7 +6547,7 @@ db.command.aggregate.size(<array>)
  
 ```js
 const $ = db.command.aggregate
-let res = await db.collection('staff').aggregate()
+let res = await db.collection('shops').aggregate()
   .project({
     totalStaff: $.size('$staff')
   })
@@ -6496,7 +6563,7 @@ let res = await db.collection('staff').aggregate()
 
 #### slice
 
-聚合操作符。类似 JavaScritp 的 `slice` 方法。返回给定数组的指定子集。  
+类似 JavaScritp 的 `slice` 方法。返回给定数组的指定子集。  
 
       
 #####  API 说明
@@ -6552,7 +6619,7 @@ let res = await db.collection('fruits').aggregate()
 
 #### zip
 
-聚合操作符。把二维数组的第二维数组中的相同序号的元素分别拼装成一个新的数组进而组装成一个新的二维数组。如可将 `[ [ 1, 2, 3 ], [ "a", "b", "c" ] ]` 转换成 `[ [ 1, "a" ], [ 2, "b" ], [ 3, "c" ] ]`。  
+把二维数组的第二维数组中的相同序号的元素分别拼装成一个新的数组进而组装成一个新的二维数组。如可将 `[ [ 1, 2, 3 ], [ "a", "b", "c" ] ]` 转换成 `[ [ 1, "a" ], [ 2, "b" ], [ 3, "c" ] ]`。  
 
      
 #####  API 说明
@@ -6673,7 +6740,7 @@ let res = await db.collection('items').aggregate()
 
 #### and
 
-聚合操作符。给定多个表达式，`and` 仅在所有表达式都返回 `true` 时返回 `true`，否则返回 `false`。  
+给定多个表达式，`and` 仅在所有表达式都返回 `true` 时返回 `true`，否则返回 `false`。  
 
       
 #####  API 说明
@@ -6717,7 +6784,7 @@ let res = await db.collection('price').aggregate()
 
 #### not
 
-聚合操作符。给定一个表达式，如果表达式返回 `true`，则 `not` 返回 `false`，否则返回 `true`。注意表达式不能为逻辑表达式（`and`、`or`、`nor`、`not`）。  
+给定一个表达式，如果表达式返回 `true`，则 `not` 返回 `false`，否则返回 `true`。注意表达式不能为逻辑表达式（`and`、`or`、`nor`、`not`）。  
 
       
 #####  API 说明
@@ -6761,7 +6828,7 @@ let res = await db.collection('price').aggregate()
 
 #### or
 
-聚合操作符。给定多个表达式，如果任意一个表达式返回 `true`，则 `or` 返回 `true`，否则返回 `false`。  
+给定多个表达式，如果任意一个表达式返回 `true`，则 `or` 返回 `true`，否则返回 `false`。  
 
       
 #####  API 说明
@@ -6807,7 +6874,7 @@ let res = await db.collection('price').aggregate()
 
 #### cmp
 
-聚合操作符。给定两个值，返回其比较值：  
+给定两个值，返回其比较值：  
 
       
 #####  API 说明
@@ -6853,7 +6920,7 @@ let res = await db.collection('price').aggregate()
 
 #### eq
 
-聚合操作符。匹配两个值，如果相等则返回 `true`，否则返回 `false`。  
+匹配两个值，如果相等则返回 `true`，否则返回 `false`。  
 
       
 #####  API 说明
@@ -6895,7 +6962,7 @@ let res = await db.collection('price').aggregate()
 
 #### gt
 
-聚合操作符。匹配两个值，如果前者大于后者则返回 `true`，否则返回 `false`。  
+匹配两个值，如果前者大于后者则返回 `true`，否则返回 `false`。  
 
       
 #####  API 说明
@@ -6937,7 +7004,7 @@ db.collection('price').aggregate()
 
 #### gte
 
-聚合操作符。匹配两个值，如果前者大于或等于后者则返回 `true`，否则返回 `false`。  
+匹配两个值，如果前者大于或等于后者则返回 `true`，否则返回 `false`。  
 
       
 #####  API 说明
@@ -6979,7 +7046,7 @@ let res = await b.collection('price').aggregate()
 
 #### lt
 
-聚合操作符。匹配两个值，如果前者小于后者则返回 `true`，否则返回 `false`。  
+匹配两个值，如果前者小于后者则返回 `true`，否则返回 `false`。  
 
       
 #####  API 说明
@@ -7021,7 +7088,7 @@ let res = await db.collection('price').aggregate()
 
 #### lte
 
-聚合操作符。匹配两个值，如果前者小于或等于后者则返回 `true`，否则返回 `false`。  
+匹配两个值，如果前者小于或等于后者则返回 `true`，否则返回 `false`。  
 
       
 #####  API 说明
@@ -7063,7 +7130,7 @@ let res = await db.collection('price').aggregate()
 
 #### neq
 
-聚合操作符。匹配两个值，如果不相等则返回 `true`，否则返回 `false`。  
+匹配两个值，如果不相等则返回 `true`，否则返回 `false`。  
 
       
 #####  API 说明
@@ -7107,7 +7174,7 @@ let res = await db.collection('price').aggregate()
 
 #### cond
 
-聚合操作符。计算布尔表达式，返回指定的两个值其中之一。  
+计算布尔表达式，返回指定的两个值其中之一。  
 
      
 #####  API 说明
@@ -7164,7 +7231,7 @@ let res = await db.collection('items').aggregate()
 
 #### ifNull
 
-聚合操作符。计算给定的表达式，如果表达式结果为 null、undefined 或者不存在，那么返回一个替代值；否则返回原值。  
+计算给定的表达式，如果表达式结果为 null、undefined 或者不存在，那么返回一个替代值；否则返回原值。  
 
       
 #####  API 说明
@@ -7208,7 +7275,7 @@ let res = await db.collection('items').aggregate()
 
 #### switch
 
-聚合操作符。根据给定的 `switch-case-default` 计算返回值、  
+根据给定的 `switch-case-default` 计算返回值、  
 
      
 #####  API 说明
@@ -7264,15 +7331,20 @@ let res = await db.collection('items').aggregate()
 
 ### 日期操作符
 
+**注意**
+
+- 以下日期操作符中`timezone`均支持以下几种形式
+
+```js
+timezone: "Asia/Shanghai" // Asia/Shanghai时区
+timezone: "+08" // utc+8时区
+timezone: "+08:30" // 时区偏移8小时30分
+timezone: "+0830" // 时区偏移8小时30分，同上
+```
+
 #### dateFromParts
 
-聚合操作符。给定日期的相关信息，构建并返回一个日期对象。  
-
-**平台差异说明**
-
-|阿里云	|腾讯云	|
-|----		|----		|
-|×			|√			|
+给定日期的相关信息，构建并返回一个日期对象。  
      
 #####  API 说明
  语法如下：  
@@ -7306,10 +7378,6 @@ db.command.aggregate.dateFromParts({
 })
 ```
 
-**说明**
-
-- `timezone`字段请参考[Olson Timezone Identifier](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)，形式类似：`Asia/Shanghai`
-
 #####  示例代码
  
 ```js
@@ -7340,13 +7408,7 @@ let res = await db
 
 #### dateFromString
 
-聚合操作符。将一个日期/时间字符串转换为日期对象  
-
-**平台差异说明**
-
-|阿里云	|腾讯云	|
-|----		|----		|
-|×			|√			|
+将一个日期/时间字符串转换为日期对象  
 
 #####  API 说明
  语法如下：  
@@ -7385,14 +7447,8 @@ let res = await db
 
 #### dateToString
 
-聚合操作符。根据指定的表达式将日期对象格式化为符合要求的字符串。  
+根据指定的表达式将日期对象格式化为符合要求的字符串。  
 
-**平台差异说明**
-
-|阿里云	|腾讯云	|
-|----		|----		|
-|×			|√			|
-     
 #####  API 说明
  `dateToString` 的调用形式如下：  
 
@@ -7535,15 +7591,18 @@ let res = await db
 
 #### dayOfMonth
 
-聚合操作符。返回日期字段对应的天数（一个月中的哪一天），是一个介于 1 至 31 之间的数字。  
+返回日期字段对应的天数（一个月中的哪一天），是一个介于 1 至 31 之间的数字。  
 
       
 #####  API 说明
- 语法如下：  
+
+该接口有以下两种用法，语法如下：  
 
  
 ```js
 db.command.aggregate.dayOfMonth(<日期字段>)
+
+db.command.aggregate.dayOfMonth({date:<日期字段>,timezone:<时区>})
 ```
 
 #####  示例代码
@@ -7581,18 +7640,20 @@ let res = await db
 
 #### dayOfWeek
 
-聚合操作符。返回日期字段对应的天数（一周中的第几天），是一个介于 1（周日）到 7（周六）之间的整数。  
+返回日期字段对应的天数（一周中的第几天），是一个介于 1（周日）到 7（周六）之间的整数。  
 
       
 #####  API 说明
- *注意：周日是每周的第 1 天**  
 
- 语法如下：  
+**注意：周日是每周的第 1 天**  
 
+该接口有以下两种用法，语法如下：  
  
 ```js
 db.command.aggregate.dayOfWeek(<日期字段>)
-```
+
+db.command.aggregate.dayOfWeek({date:<日期字段>,timezone:<时区>})
+``` 
 
 #####  示例代码
  假设集合 `dates` 有以下文档：  
@@ -7629,15 +7690,17 @@ let res = await db
 
 #### dayOfYear
 
-聚合操作符。返回日期字段对应的天数（一年中的第几天），是一个介于 1 到 366 之间的整数。  
+返回日期字段对应的天数（一年中的第几天），是一个介于 1 到 366 之间的整数。  
 
       
 #####  API 说明
- 语法如下：  
 
- 
+该接口有以下两种用法，语法如下：  
+  
 ```js
 db.command.aggregate.dayOfYear(<日期字段>)
+
+db.command.aggregate.dayOfYear({date:<日期字段>,timezone:<时区>})
 ```
 
 #####  示例代码
@@ -7675,15 +7738,17 @@ let res = await db
 
 #### hour
 
-聚合操作符。返回日期字段对应的小时数，是一个介于 0 到 23 之间的整数。  
+返回日期字段对应的小时数，是一个介于 0 到 23 之间的整数。  
 
       
 #####  API 说明
- 语法如下：  
 
- 
+该接口有以下两种用法，语法如下：  
+  
 ```js
 db.command.aggregate.hour(<日期字段>)
+
+db.command.aggregate.hour({date:<日期字段>,timezone:<时区>})
 ```
 
 #####  示例代码
@@ -7721,20 +7786,21 @@ let res = await db
 
 #### isoDayOfWeek
 
-聚合操作符。返回日期字段对应的 ISO 8601 标准的天数（一周中的第几天），是一个介于 1（周一）到 7（周日）之间的整数。  
+返回日期字段对应的 ISO 8601 标准的天数（一周中的第几天），是一个介于 1（周一）到 7（周日）之间的整数。  
 
-      
 #####  API 说明
- 语法如下：  
 
- 
+该接口有以下两种用法，语法如下：  
+  
 ```js
-db.command.aggregate.month(<日期字段>)
+db.command.aggregate.isoDayOfWeek(<日期字段>)
+
+db.command.aggregate.isoDayOfWeek({date:<日期字段>,timezone:<时区>})
 ```
 
 #####  示例代码
- 假设集合 `dates` 有以下文档：  
 
+假设集合 `dates` 有以下文档：
  
 ```js
 {
@@ -7742,7 +7808,7 @@ db.command.aggregate.month(<日期字段>)
     "date": ISODate("2019-05-14T09:38:51.686Z")
 }
 ```
-我们使用 `month()` 对 `date` 字段进行投影，获取对应的 ISO 8601 标准的天数（一周中的第几天）：  
+我们使用 `isoDayOfWeek()` 对 `date` 字段进行投影，获取对应的 ISO 8601 标准的天数（一周中的第几天）：  
 
  
 ```js
@@ -7756,9 +7822,9 @@ let res = await db
   })
   .end()
 ```
-输出如下：  
 
- 
+输出如下：
+
 ```js
 {
     "isoDayOfWeek": 2
@@ -7767,24 +7833,26 @@ let res = await db
 
 #### isoWeek
 
-聚合操作符。返回日期字段对应的 ISO 8601 标准的周数（一年中的第几周），是一个介于 1 到 53 之间的整数。  
+返回日期字段对应的 ISO 8601 标准的周数（一年中的第几周），是一个介于 1 到 53 之间的整数。  
 
       
 #####  API 说明
- 根据 ISO 8601 标准，周一到周日视为一周，本年度第一个周四所在的那周，视为本年度的第 1 周。  
 
- 例如：2016 年 1 月 7 日是那年的第一个周四，那么 2016.01.04（周一）到 2016.01.10（周日） 即为第 1 周。同理，2016 年 1 月 1 日的周数为 53。  
+根据 ISO 8601 标准，周一到周日视为一周，本年度第一个周四所在的那周，视为本年度的第 1 周。  
 
- 语法如下：  
+例如：2016 年 1 月 7 日是那年的第一个周四，那么 2016.01.04（周一）到 2016.01.10（周日） 即为第 1 周。同理，2016 年 1 月 1 日的周数为 53。  
 
- 
+该接口有以下两种用法，语法如下：  
+  
 ```js
 db.command.aggregate.isoWeek(<日期字段>)
+
+db.command.aggregate.isoWeek({date:<日期字段>,timezone:<时区>})
 ```
 
 #####  示例代码
- 假设集合 `dates` 有以下文档：  
 
+假设集合 `dates` 有以下文档：  
  
 ```js
 {
@@ -7792,6 +7860,7 @@ db.command.aggregate.isoWeek(<日期字段>)
     "date": ISODate("2019-05-14T09:38:51.686Z")
 }
 ```
+
 我们使用 `isoWeek()` 对 `date` 字段进行投影，获取对应的 ISO 8601 标准的周数（一年中的第几周）：  
 
  
@@ -7806,9 +7875,9 @@ let res = await db
   })
   .end()
 ```
+
 输出如下：  
 
- 
 ```js
 {
     "isoWeek": 20
@@ -7817,22 +7886,23 @@ let res = await db
 
 #### isoWeekYear
 
-聚合操作符。返回日期字段对应的 ISO 8601 标准的天数（一年中的第几天）。  
-
+返回日期字段对应的 ISO 8601 标准的天数（一年中的第几天）。  
       
 #####  API 说明
- 此处的“年”以第一周的周一为开始，以最后一周的周日为结束。  
 
- 语法如下：  
+此处的“年”以第一周的周一为开始，以最后一周的周日为结束。  
 
- 
+该接口有以下两种用法，语法如下：  
+  
 ```js
 db.command.aggregate.isoWeekYear(<日期字段>)
+
+db.command.aggregate.isoWeekYear({date:<日期字段>,timezone:<时区>})
 ```
 
 #####  示例代码
- 假设集合 `dates` 有以下文档：  
 
+假设集合 `dates` 有以下文档：  
  
 ```js
 {
@@ -7840,8 +7910,8 @@ db.command.aggregate.isoWeekYear(<日期字段>)
     "date": ISODate("2019-05-14T09:38:51.686Z")
 }
 ```
-我们使用 `isoWeekYear()` 对 `date` 字段进行投影，获取对应的 ISO 8601 标准的天数（一年中的第几天）：  
 
+我们使用 `isoWeekYear()` 对 `date` 字段进行投影，获取对应的 ISO 8601 标准的天数（一年中的第几天）：  
  
 ```js
 const $ = db.command.aggregate
@@ -7854,9 +7924,9 @@ let res = await db
   })
   .end()
 ```
+
 输出如下：  
 
- 
 ```js
 {
     "isoWeekYear": 2019
@@ -7865,20 +7935,21 @@ let res = await db
 
 #### millisecond
 
-聚合操作符。返回日期字段对应的毫秒数，是一个介于 0 到 999 之间的整数。  
+返回日期字段对应的毫秒数，是一个介于 0 到 999 之间的整数。  
 
-      
 #####  API 说明
- 语法如下：  
 
- 
+该接口有以下两种用法，语法如下：  
+  
 ```js
 db.command.aggregate.millisecond(<日期字段>)
+
+db.command.aggregate.millisecond({date:<日期字段>,timezone:<时区>})
 ```
 
 #####  示例代码
- 假设集合 `dates` 有以下文档：  
 
+假设集合 `dates` 有以下文档：
  
 ```js
 {
@@ -7886,9 +7957,9 @@ db.command.aggregate.millisecond(<日期字段>)
     "date": ISODate("2019-05-14T09:38:51.686Z")
 }
 ```
+
 我们使用 `millisecond()` 对 `date` 字段进行投影，获取对应的毫秒数：  
 
- 
 ```js
 const $ = db.command.aggregate
 let res = await db
@@ -7900,9 +7971,9 @@ let res = await db
   })
   .end()
 ```
+
 输出如下：  
 
- 
 ```js
 {
     "millisecond": 686
@@ -7911,29 +7982,30 @@ let res = await db
 
 #### minute
 
-聚合操作符。返回日期字段对应的分钟数，是一个介于 0 到 59 之间的整数。  
+返回日期字段对应的分钟数，是一个介于 0 到 59 之间的整数。  
 
-      
 #####  API 说明
- 语法如下：  
 
- 
+该接口有以下两种用法，语法如下：  
+  
 ```js
 db.command.aggregate.minute(<日期字段>)
+
+db.command.aggregate.minute({date:<日期字段>,timezone:<时区>})
 ```
 
 #####  示例代码
- 假设集合 `dates` 有以下文档：  
 
- 
+假设集合 `dates` 有以下文档：
+
 ```js
 {
     "_id": 1,
     "date": ISODate("2019-05-14T09:38:51.686Z")
 }
 ```
-我们使用 `minute()` 对 `date` 字段进行投影，获取对应的分钟数：  
 
+我们使用 `minute()` 对 `date` 字段进行投影，获取对应的分钟数：
  
 ```js
 const $ = db.command.aggregate
@@ -7946,9 +8018,9 @@ let res = await db
   })
   .end()
 ```
+
 输出如下：  
 
- 
 ```js
 {
     "minute": 38
@@ -7957,15 +8029,16 @@ let res = await db
 
 #### month
 
-聚合操作符。返回日期字段对应的月份，是一个介于 1 到 12 之间的整数。  
+返回日期字段对应的月份，是一个介于 1 到 12 之间的整数。  
 
-      
 #####  API 说明
- 语法如下：  
 
- 
+该接口有以下两种用法，语法如下：  
+  
 ```js
 db.command.aggregate.month(<日期字段>)
+
+db.command.aggregate.month({date:<日期字段>,timezone:<时区>})
 ```
 
 #####  示例代码
@@ -7978,9 +8051,9 @@ db.command.aggregate.month(<日期字段>)
     "date": ISODate("2019-05-14T09:38:51.686Z")
 }
 ```
+
 我们使用 `month()` 对 `date` 字段进行投影，获取对应的月份：  
 
- 
 ```js
 const $ = db.command.aggregate
 let res = await db
@@ -7992,9 +8065,9 @@ let res = await db
   })
   .end()
 ```
+
 输出如下：  
 
- 
 ```js
 {
     "month": 5
@@ -8003,30 +8076,31 @@ let res = await db
 
 #### second
 
-聚合操作符。返回日期字段对应的秒数，是一个介于 0 到 59 之间的整数，在特殊情况下（闰秒）可能等于 60。  
+返回日期字段对应的秒数，是一个介于 0 到 59 之间的整数，在特殊情况下（闰秒）可能等于 60。  
 
-      
 #####  API 说明
- 语法如下：  
 
- 
+该接口有以下两种用法，语法如下：  
+  
 ```js
 db.command.aggregate.second(<日期字段>)
+
+db.command.aggregate.second({date:<日期字段>,timezone:<时区>})
 ```
 
 #####  示例代码
- 假设集合 `dates` 有以下文档：  
 
- 
+假设集合 `dates` 有以下文档：
+
 ```js
 {
     "_id": 1,
     "date": ISODate("2019-05-14T09:38:51.686Z")
 }
 ```
+
 我们使用 `second()` 对 `date` 字段进行投影，获取对应的秒数：  
 
- 
 ```js
 const $ = db.command.aggregate
 let res = await db
@@ -8038,9 +8112,9 @@ let res = await db
   })
   .end()
 ```
+
 输出如下：  
 
- 
 ```js
 {
     "second": 51
@@ -8049,32 +8123,33 @@ let res = await db
 
 #### week
 
-聚合操作符。返回日期字段对应的周数（一年中的第几周），是一个介于 0 到 53 之间的整数。  
+返回日期字段对应的周数（一年中的第几周），是一个介于 0 到 53 之间的整数。  
 
-      
 #####  API 说明
- 每周以周日为开头，**每年的第一个周日**即为 `week 1` 的开始，这天之前是 `week 0`。  
 
- 语法如下：  
+每周以周日为开头，**每年的第一个周日**即为 `week 1` 的开始，这天之前是 `week 0`。  
 
- 
+该接口有以下两种用法，语法如下：  
+  
 ```js
 db.command.aggregate.week(<日期字段>)
+
+db.command.aggregate.week({date:<日期字段>,timezone:<时区>})
 ```
 
 #####  示例代码
- 假设集合 `dates` 有以下文档：  
 
- 
+假设集合 `dates` 有以下文档：  
+
 ```js
 {
     "_id": 1,
     "date": ISODate("2019-05-14T09:38:51.686Z")
 }
 ```
+
 我们使用 `week()` 对 `date` 字段进行投影，获取对应的周数（一年中的第几周）：  
 
- 
 ```js
 const $ = db.command.aggregate
 let res = await db
@@ -8086,9 +8161,9 @@ let res = await db
   })
   .end()
 ```
+
 输出如下：  
 
- 
 ```js
 {
     "week": 19
@@ -8097,30 +8172,31 @@ let res = await db
 
 #### year
 
-聚合操作符。返回日期字段对应的年份。  
+返回日期字段对应的年份。  
 
-      
 #####  API 说明
- 语法如下：  
 
- 
+该接口有以下两种用法，语法如下：  
+  
 ```js
 db.command.aggregate.year(<日期字段>)
+
+db.command.aggregate.year({date:<日期字段>,timezone:<时区>})
 ```
 
 #####  示例代码
- 假设集合 `dates` 有以下文档：  
 
- 
+假设集合 `dates` 有以下文档：
+
 ```js
 {
     "_id": 1,
     "date": ISODate("2019-05-14T09:38:51.686Z")
 }
 ```
-我们使用 `year()` 对 `date` 字段进行投影，获取对应的年份：  
 
- 
+我们使用 `year()` 对 `date` 字段进行投影，获取对应的年份：
+
 ```js
 const $ = db.command.aggregate
 let res = await db
@@ -8132,9 +8208,9 @@ let res = await db
   })
   .end()
 ```
-输出如下：  
 
- 
+输出如下：
+
 ```js
 {
     "year": 2019
@@ -8149,7 +8225,7 @@ let res = await db
 
 #### literal
 
-聚合操作符。直接返回一个值的字面量，不经过任何解析和处理。  
+直接返回一个值的字面量，不经过任何解析和处理。  
 
      
 #####  API 说明
@@ -8225,7 +8301,7 @@ db.collection('items').aggregate()
 
 #### mergeObjects
 
-聚合操作符。将多个文档合并为单个文档。  
+将多个文档合并为单个文档。  
 
 #####  API 说明
  使用形式如下：
@@ -8279,7 +8355,7 @@ let res = await db.collection('sales').aggregate()
 
 **一般用法**
 
- 假设集合 `test` 存在以下文档：  
+假设集合 `test` 存在以下文档：  
 
  
 ```js
@@ -8315,21 +8391,20 @@ let res = await db.collection('sales').aggregate()
 
 #### allElementsTrue
 
-聚合操作符。输入一个数组，或者数组字段的表达式。如果数组中所有元素均为真值，那么返回 `true`，否则返回 `false`。空数组永远返回 `true`。  
+输入一个数组，或者数组字段的表达式。如果数组中所有元素均为真值，那么返回 `true`，否则返回 `false`。空数组永远返回 `true`。  
 
-      
 #####  API 说明
- 语法如下：  
 
+语法如下：
  
 ```js
 allElementsTrue([<expression>])
 ```
 
 #####  示例代码
- 假设集合 `test` 有如下记录：  
 
- 
+假设集合 `test` 有如下记录：  
+
 ```js
 { "_id": 1, "array": [ true ] }
 { "_id": 2, "array": [ ] }
@@ -8364,7 +8439,7 @@ let res = await db.collection('price')
 
 #### anyElementTrue
 
-聚合操作符。输入一个数组，或者数组字段的表达式。如果数组中任意一个元素为真值，那么返回 `true`，否则返回 `false`。空数组永远返回 `false`。  
+输入一个数组，或者数组字段的表达式。如果数组中任意一个元素为真值，那么返回 `true`，否则返回 `false`。空数组永远返回 `false`。  
 
       
 #####  API 说明
@@ -8413,7 +8488,7 @@ let res = await db.collection('price')
 
 #### setDifference
 
-聚合操作符，输入两个集合，输出只存在于第一个集合中的元素。  
+输入两个集合，输出只存在于第一个集合中的元素。  
 
       
 #####  API 说明
@@ -8452,9 +8527,9 @@ let res = await db.collection('test')
 
 ```js
 { "_id": 1, "isBOnly": [] }
-{ "_id": 2, "isBOnly": [3] }
+{ "_id": 2, "isBOnly": [] }
 { "_id": 3, "isBOnly": [3] }
-{ "_id": 4, "isBOnly": [5] }
+{ "_id": 4, "isBOnly": [3] }
 { "_id": 5, "isBOnly": [] }
 { "_id": 6, "isBOnly": [{}, []] }
 { "_id": 7, "isBOnly": [] }
@@ -8463,7 +8538,7 @@ let res = await db.collection('test')
 
 #### setEquals
 
-聚合操作符，输入两个集合，判断两个集合中包含的元素是否相同（不考虑顺序、去重）。  
+输入两个集合，判断两个集合中包含的元素是否相同（不考虑顺序、去重）。  
 
       
 #####  API 说明
@@ -8513,7 +8588,7 @@ let res = await db.collection('test')
 
 #### setIntersection
 
-聚合操作符，输入两个集合，输出两个集合的交集。  
+输入两个集合，输出两个集合的交集。  
 
       
 #####  API 说明
@@ -8565,7 +8640,7 @@ let res = await db.collection('test')
 
 #### setIsSubset
 
-聚合操作符，输入两个集合，判断第一个集合是否是第二个集合的子集。  
+输入两个集合，判断第一个集合是否是第二个集合的子集。  
 
       
 #####  API 说明
@@ -8615,7 +8690,7 @@ let res = await db.collection('test')
 
 #### setUnion
 
-聚合操作符，输入两个集合，输出两个集合的并集。  
+输入两个集合，输出两个集合的并集。  
 
       
 #####  API 说明
@@ -8669,7 +8744,7 @@ let res = await db.collection('test')
 
 #### concat
 
-聚合操作符。连接字符串，返回拼接后的字符串。  
+连接字符串，返回拼接后的字符串。  
 
       
 #####  API 说明
@@ -8724,7 +8799,7 @@ db
 
 #### indexOfBytes
 
-聚合操作符。在目标字符串中查找子字符串，并返回第一次出现的 `UTF-8` 的字节索引（从0开始）。如果不存在子字符串，返回 -1。  
+在目标字符串中查找子字符串，并返回第一次出现的 `UTF-8` 的字节索引（从0开始）。如果不存在子字符串，返回 -1。  
 
       
 #####  API 说明
@@ -8777,7 +8852,7 @@ let res = await db
 
 #### indexOfCP
 
-聚合操作符。在目标字符串中查找子字符串，并返回第一次出现的 `UTF-8` 的 `code point` 索引（从0开始）。如果不存在子字符串，返回 -1。  
+在目标字符串中查找子字符串，并返回第一次出现的 `UTF-8` 的 `code point` 索引（从0开始）。如果不存在子字符串，返回 -1。  
 
       
 #####  API 说明
@@ -8832,7 +8907,7 @@ let res = await db
 
 #### split
 
-聚合操作符。按照分隔符分隔数组，并且删除分隔符，返回子字符串组成的数组。如果字符串无法找到分隔符进行分隔，返回原字符串作为数组的唯一元素。  
+按照分隔符分隔数组，并且删除分隔符，返回子字符串组成的数组。如果字符串无法找到分隔符进行分隔，返回原字符串作为数组的唯一元素。  
 
       
 #####  API 说明
@@ -8879,7 +8954,7 @@ let res = await db
 
 #### strLenBytes
 
-聚合操作符。计算并返回指定字符串中 `utf-8` 编码的字节数量。  
+计算并返回指定字符串中 `utf-8` 编码的字节数量。  
 
       
 #####  API 说明
@@ -8923,7 +8998,7 @@ db
 
 #### strLenCP
 
-聚合操作符。计算并返回指定字符串的UTF-8 [code points<span></span>](http://www.unicode.org/glossary/#code_point) 数量。  
+计算并返回指定字符串的UTF-8 [code points<span></span>](http://www.unicode.org/glossary/#code_point) 数量。  
 
       
 #####  API 说明
@@ -8967,7 +9042,7 @@ let res = await db
 
 #### strcasecmp
 
-聚合操作符。对两个字符串在不区分大小写的情况下进行大小比较，并返回比较的结果。  
+对两个字符串在不区分大小写的情况下进行大小比较，并返回比较的结果。  
 
       
 #####  API 说明
@@ -9018,7 +9093,7 @@ let res = await db
 
 #### substr
 
-聚合操作符。返回字符串从指定位置开始的指定长度的子字符串。它是 `db.command.aggregate.substrBytes` 的别名，更推荐使用后者。  
+返回字符串从指定位置开始的指定长度的子字符串。它是 `db.command.aggregate.substrBytes` 的别名，更推荐使用后者。  
 
       
 #####  API 说明
@@ -9071,7 +9146,7 @@ let res = await db
 
 #### substrBytes
 
-聚合操作符。返回字符串从指定位置开始的指定长度的子字符串。子字符串是由字符串中指定的 `UTF-8` 字节索引的字符开始，长度为指定的字节数。  
+返回字符串从指定位置开始的指定长度的子字符串。子字符串是由字符串中指定的 `UTF-8` 字节索引的字符开始，长度为指定的字节数。  
 
       
 #####  API 说明
@@ -9124,7 +9199,7 @@ let res = await db
 
 #### substrCP
 
-聚合操作符。返回字符串从指定位置开始的指定长度的子字符串。子字符串是由字符串中指定的 `UTF-8` 字节索引的字符开始，长度为指定的字节数。  
+返回字符串从指定位置开始的指定长度的子字符串。子字符串是由字符串中指定的 `UTF-8` 字节索引的字符开始，长度为指定的字节数。  
 
       
 #####  API 说明
@@ -9171,7 +9246,7 @@ let res = await db
 
 #### toLower
 
-聚合操作符。将字符串转化为小写并返回。  
+将字符串转化为小写并返回。  
 
      
 #####  API 说明
@@ -9218,7 +9293,7 @@ let res = await db
 
 #### toUpper
 
-聚合操作符。将字符串转化为大写并返回。  
+将字符串转化为大写并返回。  
 
      
 #####  API 说明
@@ -9256,33 +9331,31 @@ let res = await db
 ```
 返回的结果如下：  
 
- 
 ```js
 { "result": "DONG" }
 { "result": "WANG" }
 { "result": "LI" }
 ```
 
-### 累计器操作符
+### 分组运算方法@accumulator
 
 #### addToSet
 
-聚合操作符。聚合运算符。向数组中添加值，如果数组中已存在该值，不执行任何操作。它只能在 `group stage` 中使用。  
+聚合运算符。向数组中添加值，如果数组中已存在该值，不执行任何操作。它只能在 `group stage` 中使用。  
 
-      
 #####  API 说明
- `addToSet` 语法如下：  
 
+`addToSet` 语法如下：  
  
 ```js
 db.command.aggregate.addToSet(<表达式>)
 ```
-表达式是形如 `$ + 指定字段` 的字符串。如果指定字段的值是数组，那么整个数组会被当作一个元素。  
 
+表达式是形如 `$ + 指定字段` 的字符串。如果指定字段的值是数组，那么整个数组会被当作一个元素。  
  
 #####  示例代码
- 假设集合 `passages` 的记录如下：  
 
+假设集合 `passages` 的记录如下：  
  
 ```js
 { "category": "web", "tags": [ "JavaScript", "CSS" ], "title": "title1" }
@@ -9339,7 +9412,7 @@ let res = await db
 
 #### avg
 
-聚合操作符。返回一组集合中，指定字段对应数据的平均值。  
+返回一组集合中，指定字段对应数据的平均值。  
 
       
 #####  API 说明
@@ -9385,7 +9458,7 @@ let res = await db
 
 #### first
 
-聚合操作符。返回指定字段在一组集合的第一条记录对应的值。仅当这组集合是按照某种定义排序（ `sort` ）后，此操作才有意义。  
+返回指定字段在一组集合的第一条记录对应的值。仅当这组集合是按照某种定义排序（ `sort` ）后，此操作才有意义。  
 
       
 #####  API 说明
@@ -9436,7 +9509,7 @@ let res = await db
 
 #### last
 
-聚合操作符。返回指定字段在一组集合的最后一条记录对应的值。仅当这组集合是按照某种定义排序（ `sort` ）后，此操作才有意义。  
+返回指定字段在一组集合的最后一条记录对应的值。仅当这组集合是按照某种定义排序（ `sort` ）后，此操作才有意义。  
 
       
 #####  API 说明
@@ -9487,7 +9560,7 @@ let res = await db
 
 #### max
 
-聚合操作符。返回一组数值的最大值。  
+返回一组数值的最大值。  
 
       
 #####  API 说明
@@ -9539,7 +9612,7 @@ let res = await db
 
 #### min
 
-聚合操作符。返回一组数值的最小值。  
+返回一组数值的最小值。  
 
       
 #####  API 说明
@@ -9586,7 +9659,7 @@ let res = await db
 
 #### push
 
-聚合操作符。在 `group` 阶段，返回一组中表达式指定列与对应的值，一起组成的数组。  
+在 `group` 阶段，返回一组中表达式指定列与对应的值，一起组成的数组。  
 
      
 #####  API 说明
@@ -9638,7 +9711,7 @@ let res = await db
 
 #### stdDevPop
 
-聚合操作符。返回一组字段对应值的标准差。  
+返回一组字段对应值的标准差。  
 
       
 #####  API 说明
@@ -9683,7 +9756,7 @@ let res = await db.collection('students').aggregate()
 
 #### stdDevSamp
 
-聚合操作符。计算输入值的样本标准偏差。如果输入值代表数据总体，或者不概括更多的数据，请改用 `db.command.aggregate.stdDevPop`。  
+计算输入值的样本标准偏差。如果输入值代表数据总体，或者不概括更多的数据，请改用 `db.command.aggregate.stdDevPop`。  
 
       
 #####  API 说明
@@ -9732,7 +9805,7 @@ let res = await db.collection('students').aggregate()
 
 #### sum
 
-聚合操作符。计算并且返回一组字段所有数值的总和。  
+计算并且返回一组字段所有数值的总和。  
 
       
 #####  API 说明
@@ -9811,7 +9884,7 @@ let res = await db
 
 #### let
 
-聚合操作符。自定义变量，并且在指定表达式中使用，返回的结果是表达式的结果。  
+自定义变量，并且在指定表达式中使用，返回的结果是表达式的结果。  
 
      
 #####  API 说明

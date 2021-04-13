@@ -30,5 +30,12 @@ export const chooseImage = {
       sourceType = sourceType.filter(sourceType => SOURCE_TYPES.includes(sourceType))
       params.sourceType = sourceType.length ? sourceType : SOURCE_TYPES
     }
+  },
+  extension: {
+    type: Array,
+    default: ['*'],
+    validator (extension, params) {
+      if (extension.length === 0) { return 'param extension should not be empty.' }
+    }
   }
 }

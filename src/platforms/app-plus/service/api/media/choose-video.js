@@ -10,6 +10,10 @@ import {
   warpPlusErrorCallback
 } from '../util'
 
+import {
+  t
+} from 'uni-core/helpers/i18n'
+
 export function chooseVideo ({
   sourceType,
   maxDuration,
@@ -36,10 +40,14 @@ export function chooseVideo ({
   }
 
   function openAlbum () {
-    plus.gallery.pick(successCallback, errorCallback, {
+    plus.gallery.pick(({ files }) => successCallback(files[0]), errorCallback, {
       filter: 'video',
       system: false,
-      filename: TEMP_PATH + '/gallery/'
+      // 不启用 multiple 时 system 无效
+      multiple: true,
+      maximum: 1,
+      filename: TEMP_PATH + '/gallery/',
+      permissionAlert: true
     })
   }
 
@@ -62,11 +70,11 @@ export function chooseVideo ({
     }
   }
   plus.nativeUI.actionSheet({
-    cancel: '取消',
+    cancel: t('uni.chooseVideo.cancel'),
     buttons: [{
-      title: '拍摄'
+      title: t('uni.chooseVideo.sourceType.camera')
     }, {
-      title: '从手机相册选择'
+      title: t('uni.chooseVideo.sourceType.album')
     }]
   }, e => {
     switch (e.index) {

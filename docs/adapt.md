@@ -1,6 +1,6 @@
-### 屏幕适配指南
+#### 宽屏适配指南
 
-uni-app是以移动为先的理念诞生的。从uni-app 2.9起，提供了PC等宽屏的适配方案。
+uni-app是以移动为先的理念诞生的。从uni-app 2.9起，提供了PC等宽屏的适配方案，完成了全端统一。
 
 PC适配和屏幕适配略有差异。PC适配包含`宽屏适配`和`uni-app内置组件适配PC`两方面的工作。
 
@@ -14,16 +14,21 @@ uni-app提供的屏幕适配方案，包括3部分：
 各个window之间可以交互通信。
 
 这里有2个例子：
-- 分栏式的新闻模块：[https://static-7d133019-9a7e-474a-b7c2-c01751f00ca5.bspapp.com/#/](https://static-7d133019-9a7e-474a-b7c2-c01751f00ca5.bspapp.com/#/)，这个示例对应的源码在：[https://github.com/dcloudio/uni-template-news](https://github.com/dcloudio/uni-template-news)
-- 分栏式的DCloud社区：[https://static-1afcc27f-ce2f-4a6d-9416-c65a6f87d24e.bspapp.com/#/](https://static-1afcc27f-ce2f-4a6d-9416-c65a6f87d24e.bspapp.com/#/)。这个示例只适配了首页。
+- hello uni-app：[https://hellouniapp.dcloud.net.cn/](https://hellouniapp.dcloud.net.cn/)
+- 分栏式的新闻模板：[https://static-7d133019-9a7e-474a-b7c2-c01751f00ca5.bspapp.com/#/](https://static-7d133019-9a7e-474a-b7c2-c01751f00ca5.bspapp.com/#/)，这个示例对应的源码在：[https://github.com/dcloudio/uni-template-news](https://github.com/dcloudio/uni-template-news)
+
 
 以上示例建议使用最新版的chrome、Safari、或firefox访问。可以在PC模式和手机模式分别体验。以上示例源码的运行需使用HBuilderX 2.9+
 
 这些例子特点如下：
-- 在宽屏下会新增rightWindow区域，用于显示详情页面，点击左边的列表在右边显示详情内容。而窄屏下仍然是点击列表后新开一个页面显示详情内容。
-- rightWindow里的页面是复用的，不需要重写新闻详情页面，支持把已有详情页面当组件放到 rightWindow 页面中。
+- hello uni-app使用了topWindow和leftWindow，分为上左右3栏。新闻模板使用了rightWindow区域，分为左右2栏。宽屏下点击左边的列表在右边显示详情内容。而窄屏下仍然是点击列表后新开一个页面显示详情内容。
+- leftWindow或rightWindow 里的页面是复用的，不需要重写新闻详情页面，支持把已有详情页面当组件放到 leftWindow或rightWindow 页面中。
 
 这套方案是已知的、最便捷的分栏式宽屏应用适配方案。
+
+__H5 宽屏下 tabBar(选项卡) 与窗体的关系__
+
+> 目前做如下调整：leftWindow、rightWindow、topWindow 中有其一存在，则 tabBar 隐藏；不存在，则不隐藏。
 
 leftWindow等配置，在pages.json里进行。文档见：[https://uniapp.dcloud.net.cn/collocation/pages?id=topwindow](https://uniapp.dcloud.net.cn/collocation/pages?id=topwindow)
 
@@ -63,12 +68,13 @@ pages.json 配置样例
 
 如果已经有了一个为小屏设计的uni-app，在使用leftWindow等窗体适配大屏时，需理清一个思路：现有的小屏内容，放在哪个window里？
 
-比如上面的2个例子，都是双栏式窗体，左边列表、右边详情。此时适合的做法是，将原有的小屏列表作为主window，在右边扩展rightWindow来显示详情。
+如果应用的首页是列表，二级页是详情，此时适合的做法是，将原有的小屏列表作为主window，在右边扩展rightWindow来显示详情。
 
 以新闻示例项目为例，预览地址[https://static-7d133019-9a7e-474a-b7c2-c01751f00ca5.bspapp.com/#/](https://static-7d133019-9a7e-474a-b7c2-c01751f00ca5.bspapp.com/#/)。这个项目的源码已经内置于HBuilderX 2.9中，新建uni-app项目时选择新闻/资讯模板。
 
-首先在这个项目的pages.json里，配置一个rightWindow，放置一个新页面right-window.vue。
+首先在这个项目的`pages.json`文件中，配置[`rightWindow`选项](https://uniapp.dcloud.net.cn/collocation/pages?id=rightwindow)，放置一个新页面`right-window.vue`。
 ```json
+# pages.json
 "rightWindow": {
     "path": "responsive/right-window.vue",
     "style": {
@@ -80,12 +86,14 @@ pages.json 配置样例
   }
 ```
 
-rightWindow对应的页面不需要重写一遍新闻详情的页面逻辑，只需要引入之前的详情页面组件。
+`rightWindow`对应的页面不需要重写一遍新闻详情的页面逻辑，只需要引入之前的详情页面组件（详情页面`/pages/detail/detail`可自动转化为`pages-detail-detail`组件使用）。
 
 ```html
 <!--responsive/right-window.vue-->
 <template>
   <view>
+    <!-- 这里将 /pages/detail/detail.nvue 页面作为一个组件使用 -->
+    <!-- 路径 “/pages/detail/detail” 转为 “pages-detail-detail” 组件 -->
     <pages-detail-detail ref="detailPage"></pages-detail-detail>
   </view>
 </template>
@@ -93,7 +101,9 @@ rightWindow对应的页面不需要重写一遍新闻详情的页面逻辑，只
 <script>
   export default {
     created(e) {
+      //监听自定义事件，该事件由详情页列表的点击触发
       uni.$on('updateDetail', (e) => {
+        // 执行 detailPage组件，即：/pages/detail/detail.nvue 页面的load方法
         this.$refs.detailPage.load(e.detail);
       })
     },
@@ -104,14 +114,15 @@ rightWindow对应的页面不需要重写一遍新闻详情的页面逻辑，只
 ```
 
 然后在新闻列表页面，处理点击列表后与rightWindow交互通信的逻辑。
+
 ```js
 // pages/news/news-page.nvue
 goDetail(detail) {
-	if (this._isWidescreen) { //宽屏时与rightWindow通信
+	if (this._isWidescreen) { //若为宽屏，则触发右侧详情页的自定义事件，通知右侧窗体刷新新闻详情
 		uni.$emit('updateDetail', {
 			detail: encodeURIComponent(JSON.stringify(detail))
 		})
-	} else { // 窄屏时继续跳转新窗体，在新窗体打开详情页面
+	} else { // 若为窄屏，则打开新窗体，在新窗体打开详情页面
 		uni.navigateTo({
 			url: '/pages/detail/detail?query=' + encodeURIComponent(JSON.stringify(detail))
 		});
@@ -128,9 +139,9 @@ leftWindow比较适合放置导航页面。如果你的应用首页有很多tab�
 
 leftWindow除了适用于手机应用适配大屏，也适用于重新开发的PC应用，尤其是PC Admin管理控制台。
 
-这里有一个使用uni-app做PC Admin的例子：[https://github.com/dcloudio/uni-template-admin](https://github.com/dcloudio/uni-template-admin)
+DCloud官方基于uni-app的pc版，推出了unicloud Admin：[https://uniapp.dcloud.net.cn/uniCloud/admin](https://uniapp.dcloud.net.cn/uniCloud/admin)
 
-目前的leftWindow、rightWindow、topWindow 只支持H5端。计划后续在Pad App上实现该配置。小程序无法支持该配置。
+目前的leftWindow、rightWindow、topWindow 只支持web端。计划后续在Pad App上实现该配置。小程序无法支持该配置。
 
 
 #### 2. 组件级适配方案：match-media组件
@@ -191,7 +202,7 @@ uni-app的屏幕适配推荐方案是运行时动态适配，而不是为PC版�
 }
 ```
 
-通过上述配置中的前2个，即rpxCalcMaxDeviceWidth和rpxCalcBaseDeviceWidth，即可有效解决使用了rpx后，在宽屏下界面变的奇大无比的问题。如果你不需要特别定义这2个参数的数值，则完全可以不再pages.json配置它们，让它们保持默认的960和375即可。
+通过上述配置中的前2个，即rpxCalcMaxDeviceWidth和rpxCalcBaseDeviceWidth，即可有效解决使用了rpx后，在宽屏下界面变的奇大无比的问题。如果你不需要特别定义这2个参数的数值，则无需在`pages.json`中配置它们，保持默认的960和375即可。
 
 但是，rpx的最大适配宽度被限定后，会带来一个新问题：如果您的代码中把750rpx当做100%来使用（官方强烈不推荐这种写法，即便是nvue不支持百分比，也应该使用flex来解决撑满问题），此时不管屏幕宽度为多少，哪怕超过了960px，您的预期仍然是要占满整个屏幕宽度，但如果按rpxCalcBaseDeviceWidth的375px的策略执行将不再占满屏宽。
 
@@ -270,7 +281,9 @@ uni-app理论上不限定浏览器。在HBuilderX 2.9发版时，就新闻示例
 
 如果你的h5版已经开发完毕，还没来得及适配pc，但想在pc上先用起来。那么可以在pc网页里使用iframe，约定好宽度，在里面套用uni-app的窄屏版。
 
-当然还可以在iframe旁边放置二维码，提供手机版扫码地址。
+当然还可以在iframe旁边放置二维码，提供手机版扫码地址，例如：
+
+![](https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-dc-site/979f7940-12ba-11eb-b680-7980c8a877b8.png)
 
 #### 通过electron打包为windows、mac、linux客户端
 
@@ -279,3 +292,13 @@ uni-app理论上不限定浏览器。在HBuilderX 2.9发版时，就新闻示例
 开发者可以随意调用electron的API，以调用更多操作系统的能力（为方便多端兼容，可以将这些特殊API写在自定义的条件编译里）
 
 插件市场有已经封装好的一些插件，详见：[https://ext.dcloud.net.cn/search?q=electron](https://ext.dcloud.net.cn/search?q=electron)
+
+#### 响应式布局组件：uni-row
+
+流式栅格系统，随着屏幕或视口分为 24 份，可以迅速简便地创建布局。
+
+该插件将屏幕分为五个档位：`<768px`、`>=768px`、`>=992px`、`>=1200px`、`>=1920px`。
+
+对应的可以使用`xs`、`sm`、`md`、`lg`、`xl`来控制在不同分辨率下的显示效果。详情可在插件市场查看。
+
+插件地址：https://ext.dcloud.net.cn/plugin?id=3958

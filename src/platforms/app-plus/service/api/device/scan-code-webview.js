@@ -1,4 +1,8 @@
 import {
+  TEMP_PATH
+} from '../constants'
+
+import {
   getStatusBarStyle
 } from '../util'
 
@@ -15,6 +19,11 @@ import {
   registerPlusMessage,
   consumePlusMessage
 } from '../../framework/plus-message'
+
+import {
+  t,
+  getLocale
+} from 'uni-core/helpers/i18n'
 
 export const SCAN_ID = '__UNIAPP_SCAN'
 export const SCAN_PATH = '_www/__uniappscan.html'
@@ -91,14 +100,14 @@ export function scanCode ({
   if (!onlyFromCamera) {
     buttons.push({
       float: 'right',
-      text: '相册',
+      text: t('uni.scanCode.album'),
       fontSize: '17px',
       width: '60px',
       onclick: function () {
         plus.gallery.pick(file => {
           barcode.scan(file, (type, code, path, charSet) => {
             if (isDark) {
-              plus.navigator.setStatusBarStyle('isDark')
+              plus.navigator.setStatusBarStyle('dark')
             }
             result = {
               type,
@@ -107,15 +116,19 @@ export function scanCode ({
             }
             webview.close('auto')
           }, () => {
-            plus.nativeUI.toast('识别失败')
+            plus.nativeUI.toast(t('uni.scanCode.fail'))
           }, filters, autoDecodeCharSet)
         }, err => {
-          if (err.code !== 12) {
-            plus.nativeUI.toast('选择失败')
+          // iOS {"code":-2,"message":"用户取消,https://ask.dcloud.net.cn/article/282"}
+          // Android {"code":12,"message":"User cancelled"}
+          if (err.code !== (plus.os.name === 'Android' ? 12 : -2)) {
+            plus.nativeUI.toast(t('uni.scanCode.fail'))
           }
         }, {
           multiple: false,
-          system: false
+          system: false,
+          filename: TEMP_PATH + '/gallery/',
+          permissionAlert: true
         })
       }
     })
@@ -127,7 +140,7 @@ export function scanCode ({
       type: 'float',
       backgroundColor: 'rgba(0,0,0,0)',
       titleColor: '#ffffff',
-      titleText: '扫码',
+      titleText: t('uni.scanCode.title'),
       titleSize: '17px',
       buttons
     },
@@ -138,6 +151,7 @@ export function scanCode ({
     __uniapp_dark: isDark,
     __uniapp_scan_type: filters,
     __uniapp_auto_decode_char_set: autoDecodeCharSet,
+    __uniapp_locale: getLocale(),
     'uni-app': 'none'
   })
   const waiting = plus.nativeUI.showWaiting()

@@ -17,5 +17,12 @@ export const chooseVideo = {
   camera: {
     type: String,
     default: 'back'
+  },
+  extension: {
+    type: Array,
+    default: ['*'],
+    validator (extension, params) {
+      if (extension.length === 0) { return 'param extension should not be empty.' }
+    }
   }
 }

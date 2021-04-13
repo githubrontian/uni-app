@@ -57,7 +57,7 @@ const getPageComponents = function (inputDir, pagesJson) {
   if (tabBarList.length) { // 添加全部属性，方便 Vue 响应式
     pagesJson.tabBar.color = pagesJson.tabBar.color || '#999'
     pagesJson.tabBar.selectedColor = pagesJson.tabBar.selectedColor || '#007aff'
-    pagesJson.tabBar.backgroundColor = pagesJson.tabBar.backgroundColor || '#f7f7fa'
+    pagesJson.tabBar.backgroundColor = pagesJson.tabBar.backgroundColor || ''
     pagesJson.tabBar.borderStyle = pagesJson.tabBar.borderStyle || 'black'
   }
 
@@ -157,7 +157,8 @@ const getPageComponents = function (inputDir, pagesJson) {
       windowTop,
       topWindow: pageStyle.topWindow,
       leftWindow: pageStyle.leftWindow,
-      rightWindow: pageStyle.rightWindow
+      rightWindow: pageStyle.rightWindow,
+      maxWidth: pageStyle.maxWidth
     }
   }).filter(pageComponents => !!pageComponents)
 }
@@ -217,7 +218,8 @@ const genPageRoutes = function (pageComponents) {
       tabBarIndex,
       topWindow,
       leftWindow,
-      rightWindow
+      rightWindow,
+      maxWidth
     }) => {
       return `
 {
@@ -243,7 +245,7 @@ component: {
 },
 meta:{${isQuit ? '\nid:' + (id++) + ',' : ''}
   name:'${name}',
-  isNVue:${isNVue},${topWindow === false ? 'topWindow:false,\n' : ''}${leftWindow === false ? 'leftWindow:false,\n' : ''}${rightWindow === false ? 'rightWindow:false,\n' : ''}
+  isNVue:${isNVue},maxWidth:${maxWidth || 0},${topWindow === false ? 'topWindow:false,\n' : ''}${leftWindow === false ? 'leftWindow:false,\n' : ''}${rightWindow === false ? 'rightWindow:false,\n' : ''}
   pagePath:'${route}'${isQuit ? ',\nisQuit:true' : ''}${isEntry ? ',\nisEntry:true' : ''}${isTabBar ? ',\nisTabBar:true' : ''}${tabBarIndex !== -1 ? (',\ntabBarIndex:' + tabBarIndex) : ''},
   windowTop:${windowTop}
 }

@@ -9,7 +9,16 @@
       width="300"
       height="150"
     />
-    <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden;">
+    <div
+      style="
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      "
+    >
       <slot />
     </div>
     <v-uni-resize-sensor
@@ -29,6 +38,7 @@ import {
 } from 'uni-helpers/hidpi'
 
 import saveImage from 'uni-platform/helpers/save-image'
+import { getSameOriginUrl } from 'uni-platform/helpers/file'
 
 function resolveColor (color) {
   color = color.slice(0)
@@ -212,24 +222,21 @@ export default {
             data.forEach(function (color_, method_) {
               c2d[_[method_]] = _[method_] === 'shadowColor' ? resolveColor(color_) : color_
             })
-          } else {
-            if (method1 === 'fontSize') {
-              c2d.font = c2d.font.replace(/\d+\.?\d*px/, data[0] + 'px')
-            } else {
-              if (method1 === 'lineDash') {
-                c2d.setLineDash(data[0])
-                c2d.lineDashOffset = data[1] || 0
-              } else {
-                if (method1 === 'textBaseline') {
-                  if (data[0] === 'normal') {
-                    data[0] = 'alphabetic'
-                  }
-                  c2d[method1] = data[0]
-                } else {
-                  c2d[method1] = data[0]
-                }
-              }
+          } else if (method1 === 'fontSize') {
+            const font = c2d.__font__ || c2d.font
+            c2d.__font__ = c2d.font = font.replace(/\d+\.?\d*px/, data[0] + 'px')
+          } else if (method1 === 'lineDash') {
+            c2d.setLineDash(data[0])
+            c2d.lineDashOffset = data[1] || 0
+          } else if (method1 === 'textBaseline') {
+            if (data[0] === 'normal') {
+              data[0] = 'alphabetic'
             }
+            c2d[method1] = data[0]
+          } else if (method1 === 'font') {
+            c2d.__font__ = c2d.font = data[0]
+          } else {
+            c2d[method1] = data[0]
           }
         } else if (method === 'fillPath' || method === 'strokePath') {
           method = method.replace(/Path/, '')
@@ -303,59 +310,20 @@ export default {
           image.onload = function () {
             image.ready = true
           }
-          /**
-           * 从本地文件加载
-           * @param {string} path 文件路径
-           */
-          function loadFile (path) {
-            function onError () {
-              image.src = src
-            }
-            plus.io.resolveLocalFileSystemURL(path, function (entry) {
-              entry.file(function (file) {
-                var fileReader = new plus.io.FileReader()
-                fileReader.onload = function (data) {
-                  image.src = data.target.result
-                }
-                fileReader.onerror = onError
-                fileReader.readAsDataURL(file)
-              }, onError)
-            }, onError)
-          }
-          /**
-           * 从网络加载
-           * @param {string} url 文件地址
-           */
-          function loadUrl (url) {
-            plus.downloader.createDownload(url, {
-              filename: '_doc/uniapp_temp/download/'
-            }, function (d, status) {
-              if (status === 200) {
-                loadFile(d.filename)
-              } else {
-                image.src = src
-              }
-            }).start()
-          }
 
-          if (__PLATFORM__ === 'app-plus') {
-            // WKWebView
-            if (window.webkit && window.webkit.messageHandlers) {
-              if (src.indexOf('file://') === 0) {
-                loadFile(src)
-                return
-              } else if (src.indexOf('http://') === 0 || src.indexOf('https://') === 0) {
-                loadUrl(src)
-                return
-              }
-            }
-            // Chrome84+ 本地路径
-            if (src.indexOf('file://') === 0 && navigator.vendor === 'Google Inc.' && 'wakeLock' in navigator) {
+          // 安卓 WebView 除本地路径无跨域问题
+          if (__PLATFORM__ === 'app-plus' && navigator.vendor === 'Google Inc.') {
+            if (src.indexOf('file://') === 0) {
               image.crossOrigin = 'anonymous'
             }
+            image.src = src
+            return
           }
-
-          image.src = src
+          getSameOriginUrl(src).then(src => {
+            image.src = src
+          }).catch(() => {
+            image.src = src
+          })
         }
       })
     },
@@ -401,12 +369,10 @@ export default {
     }) {
       const canvas = this.$refs.canvas
       let data
-      if (!width) {
-        width = canvas.offsetWidth - x
-      }
-      if (!height) {
-        height = canvas.offsetHeight - y
-      }
+      const maxWidth = canvas.offsetWidth - x
+      width = width ? Math.min(width, maxWidth) : maxWidth
+      const maxHeight = canvas.offsetHeight - y
+      height = height ? Math.min(height, maxHeight) : maxHeight
       if (!hidpi) {
         if (!destWidth && !destHeight) {
           destWidth = Math.round(width * pixelRatio)
@@ -431,16 +397,24 @@ export default {
       context.drawImageByCanvas(canvas, x, y, width, height, 0, 0, destWidth, destHeight, false)
       let result
       try {
+        let compressed
         if (dataType === 'base64') {
           data = newCanvas.toDataURL(`image/${type}`, qualit)
         } else {
           const imgData = context.getImageData(0, 0, destWidth, destHeight)
-          // fix [...]展开TypedArray在低版本手机报错的问题，使用Array.prototype.slice
-          data = Array.prototype.slice.call(imgData.data)
+          if (__PLATFORM__ === 'app-plus') {
+            const pako = require('pako')
+            data = pako.deflateRaw(imgData.data, { to: 'string' })
+            compressed = true
+          } else {
+            // fix [...]展开TypedArray在低版本手机报错的问题，使用Array.prototype.slice
+            data = Array.prototype.slice.call(imgData.data)
+          }
         }
         result = {
           errMsg: 'canvasGetImageData:ok',
           data,
+          compressed,
           width: destWidth,
           height: destHeight
         }
@@ -466,6 +440,7 @@ export default {
       y,
       width,
       height,
+      compressed,
       callbackId
     }) {
       try {
@@ -474,6 +449,10 @@ export default {
         }
         const canvas = getTempCanvas(width, height)
         const context = canvas.getContext('2d')
+        if (__PLATFORM__ === 'app-plus' && compressed) {
+          const pako = require('pako')
+          data = pako.inflateRaw(data)
+        }
         context.putImageData(new ImageData(new Uint8ClampedArray(data), width, height), 0, 0)
         this.$refs.canvas.getContext('2d').drawImage(canvas, x, y, width, height)
         canvas.height = canvas.width = 0

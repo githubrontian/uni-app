@@ -1,11 +1,12 @@
 import {
-  normalizeDataset
+  getTargetDataset
 } from 'uni-helpers/index'
 
 import getWindowOffset from 'uni-platform/helpers/get-window-offset'
 
 import {
-  findElm
+  findElm,
+  elementMatchesPolyfill
 } from './util'
 
 function getRootInfo (fields) {
@@ -46,7 +47,7 @@ function getNodeInfo (el, fields) {
     info.id = el.id
   }
   if (fields.dataset) {
-    info.dataset = normalizeDataset(el.dataset || {})
+    info.dataset = getTargetDataset(el)
   }
   if (fields.rect || fields.size) {
     const rect = el.getBoundingClientRect()
@@ -95,7 +96,7 @@ function getNodeInfo (el, fields) {
 }
 
 function getNodesInfo (pageVm, component, selector, single, fields) {
-  const $el = findElm(component, pageVm)
+  const $el = elementMatchesPolyfill(findElm(component, pageVm))
   if (!$el || ($el && $el.nodeType === 8)) { // Comment
     return single ? null : []
   }
@@ -124,16 +125,17 @@ export function requestComponentInfo ({
   reqId,
   reqs
 }, pageId) {
-  const pages = getCurrentPages() // 跨平台时，View 层也应该实现该方法，举例 App 上，View 层的 getCurrentPages 返回长度为1的当前页面数组
-
-  const page = pages.find(page => page.$page.id === pageId)
-
-  if (!page) {
-    throw new Error(`Not Found：Page[${pageId}]`)
+  let pageVm
+  if (pageId._isVue) {
+    pageVm = pageId
+  } else {
+    const pages = getCurrentPages() // 跨平台时，View 层也应该实现该方法，举例 App 上，View 层的 getCurrentPages 返回长度为1的当前页面数组
+    const page = pages.find(page => page.$page.id === pageId)
+    if (!page) {
+      throw new Error(`Not Found：Page[${pageId}]`)
+    }
+    pageVm = page.$vm
   }
-
-  const pageVm = page.$vm
-
   const result = []
   reqs.forEach(function ({
     component,
@@ -151,5 +153,5 @@ export function requestComponentInfo ({
   UniViewJSBridge.publishHandler('onRequestComponentInfo', {
     reqId,
     res: result
-  }, pageId)
+  })
 }

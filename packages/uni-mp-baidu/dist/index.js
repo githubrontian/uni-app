@@ -231,7 +231,7 @@ const promiseInterceptor = {
 };
 
 const SYNC_API_RE =
-  /^\$|sendNativeEvent|restoreGlobal|getCurrentSubNVue|getMenuButtonBoundingClientRect|^report|interceptors|Interceptor$|getSubNVueById|requireNativePlugin|upx2px|hideKeyboard|canIUse|^create|Sync$|Manager$|base64ToArrayBuffer|arrayBufferToBase64/;
+  /^\$|Window$|WindowStyle$|sendNativeEvent|restoreGlobal|getCurrentSubNVue|getMenuButtonBoundingClientRect|^report|interceptors|Interceptor$|getSubNVueById|requireNativePlugin|upx2px|hideKeyboard|canIUse|^create|Sync$|Manager$|base64ToArrayBuffer|arrayBufferToBase64/;
 
 const CONTEXT_API_RE = /^create|Manager$/;
 
@@ -527,6 +527,39 @@ var previewImage = {
   }
 };
 
+const UUID_KEY = '__DC_STAT_UUID';
+let deviceId;
+function addUuid (result) {
+  deviceId = deviceId || swan.getStorageSync(UUID_KEY);
+  if (!deviceId) {
+    deviceId = Date.now() + '' + Math.floor(Math.random() * 1e7);
+    swan.setStorage({
+      key: UUID_KEY,
+      data: deviceId
+    });
+  }
+  result.deviceId = deviceId;
+}
+
+function addSafeAreaInsets (result) {
+  if (result.safeArea) {
+    const safeArea = result.safeArea;
+    result.safeAreaInsets = {
+      top: safeArea.top,
+      left: safeArea.left,
+      right: result.windowWidth - safeArea.right,
+      bottom: result.windowHeight - safeArea.bottom
+    };
+  }
+}
+
+var getSystemInfo = {
+  returnValue: function (result) {
+    addUuid(result);
+    addSafeAreaInsets(result);
+  }
+};
+
 // 不支持的 API 列表
 const todos = [
   'preloadPage',
@@ -611,6 +644,8 @@ const protocols = {
   navigateTo,
   redirectTo,
   previewImage,
+  getSystemInfo,
+  getSystemInfoSync: getSystemInfo,
   getRecorderManager: {
     returnValue (fromRet) {
       fromRet.onFrameRecorded = createTodoMethod('RecorderManager', 'onFrameRecorded');
@@ -668,7 +703,7 @@ function processArgs (methodName, fromArgs, argsOption = {}, returnValue = {}, k
           keyOption = keyOption(fromArgs[key], fromArgs, toArgs);
         }
         if (!keyOption) { // 不支持的参数
-          console.warn(`百度小程序 ${methodName}暂不支持${key}`);
+          console.warn(`The '${methodName}' method of platform '百度小程序' does not support option '${key}'`);
         } else if (isStr(keyOption)) { // 重写参数 key
           toArgs[keyOption] = fromArgs[key];
         } else if (isPlainObject(keyOption)) { // {name:newName,value:value}可重新指定参数 key:value
@@ -703,7 +738,7 @@ function wrapper (methodName, method) {
     const protocol = protocols[methodName];
     if (!protocol) { // 暂不支持的 api
       return function () {
-        console.error(`百度小程序 暂不支持${methodName}`);
+        console.error(`Platform '百度小程序' does not support '${methodName}'.`);
       }
     }
     return function (arg1, arg2) { // 目前 api 最多两个参数
@@ -750,7 +785,7 @@ function createTodoApi (name) {
     complete
   }) {
     const res = {
-      errMsg: `${name}:fail:暂不支持 ${name} 方法`
+      errMsg: `${name}:fail method '${name}' not supported`
     };
     isFn(fail) && fail(res);
     isFn(complete) && complete(res);
@@ -784,7 +819,7 @@ function getProvider ({
     isFn(success) && success(res);
   } else {
     res = {
-      errMsg: 'getProvider:fail:服务[' + service + ']不存在'
+      errMsg: 'getProvider:fail service not found'
     };
     isFn(fail) && fail(res);
   }
@@ -934,7 +969,7 @@ function requestPayment (params) {
   }
   if (parseError) {
     params.fail && params.fail({
-      errMsg: 'requestPayment:fail: 参数 orderInfo 数据结构不正确，参考：https://uniapp.dcloud.io/api/plugins/payment?id=orderinfo'
+      errMsg: 'requestPayment:fail 参数 orderInfo 数据结构不正确，参考：https://uniapp.dcloud.io/api/plugins/payment?id=orderinfo'
     });
   } else {
     swan.requestPolymerPayment(params);
@@ -976,16 +1011,19 @@ function initHook (name, options) {
     };
   }
 }
+if (!MPPage.__$wrappered) {
+  MPPage.__$wrappered = true;
+  Page = function (options = {}) {
+    initHook('onLoad', options);
+    return MPPage(options)
+  };
+  Page.after = MPPage.after;
 
-Page = function (options = {}) {
-  initHook('onLoad', options);
-  return MPPage(options)
-};
-
-Component = function (options = {}) {
-  initHook('created', options);
-  return MPComponent(options)
-};
+  Component = function (options = {}) {
+    initHook('created', options);
+    return MPComponent(options)
+  };
+}
 
 const PAGE_EVENT_HOOKS = [
   'onPullDownRefresh',
@@ -1522,7 +1560,7 @@ function handleEvent (event) {
             }
             handler.once = true;
           }
-          const params = processEventArgs(
+          let params = processEventArgs(
             this.$vm,
             event,
             eventArray[1],
@@ -1530,9 +1568,13 @@ function handleEvent (event) {
             isCustom,
             methodName
           );
+          params = Array.isArray(params) ? params : [];
           // 参数尾部增加原始事件对象用于复杂表达式内获取额外数据
-          // eslint-disable-next-line no-sparse-arrays
-          ret.push(handler.apply(handlerCtx, (Array.isArray(params) ? params : []).concat([, , , , , , , , , , event])));
+          if (/=\s*\S+\.eventParams\s*\|\|\s*\S+\[['"]event-params['"]\]/.test(handler.toString())) {
+            // eslint-disable-next-line no-sparse-arrays
+            params = params.concat([, , , , , , , , , , event]);
+          }
+          ret.push(handler.apply(handlerCtx, params));
         }
       });
     }
@@ -1556,10 +1598,28 @@ const hooks = [
   'onUnhandledRejection'
 ];
 
+function initEventChannel$1 () {
+  Vue.prototype.getOpenerEventChannel = function () {
+    if (!this.__eventChannel__) {
+      this.__eventChannel__ = new EventChannel();
+    }
+    return this.__eventChannel__
+  };
+  const callHook = Vue.prototype.__call_hook;
+  Vue.prototype.__call_hook = function (hook, args) {
+    if (hook === 'onLoad' && args && args.__id__) {
+      this.__eventChannel__ = getEventChannel(args.__id__);
+      delete args.__id__;
+    }
+    return callHook.call(this, hook, args)
+  };
+}
+
 function parseBaseApp (vm, {
   mocks,
   initRefs
 }) {
+  initEventChannel$1();
   if (vm.$options.store) {
     Vue.prototype.$store = vm.$options.store;
   }
@@ -1583,7 +1643,12 @@ function parseBaseApp (vm, {
 
       delete this.$options.mpType;
       delete this.$options.mpInstance;
-
+      if (this.mpType === 'page') { // hack vue-i18n
+        const app = getApp();
+        if (app.$vm && app.$vm.$i18n) {
+          this._i18n = app.$vm.$i18n;
+        }
+      }
       if (this.mpType !== 'app') {
         initRefs(this);
         initMocks(this, mocks);
@@ -1652,16 +1717,21 @@ function initBehavior (options) {
   return Behavior(options)
 }
 
+function selectAllComponents (mpInstance, selector, $refs) {
+  const components = mpInstance.selectAllComponents(selector);
+  components.forEach(component => {
+    const ref = component.dataset.ref;
+    $refs[ref] = component.$vm || component;
+  });
+}
+
 function initRefs (vm) {
   const mpInstance = vm.$scope;
   Object.defineProperty(vm, '$refs', {
     get () {
       const $refs = {};
-      const components = mpInstance.selectAllComponents('.vue-ref');
-      components.forEach(component => {
-        const ref = component.dataset.ref;
-        $refs[ref] = component.$vm || component;
-      });
+      selectAllComponents(mpInstance, '.vue-ref', $refs);
+      // TODO 暂不考虑 for 中的 scoped
       const forComponents = mpInstance.selectAllComponents('.vue-ref-in-for');
       forComponents.forEach(component => {
         const ref = component.dataset.ref;
@@ -1722,20 +1792,6 @@ function parseApp (vm) {
 }
 
 function createApp (vm) {
-  Vue.prototype.getOpenerEventChannel = function () {
-    if (!this.__eventChannel__) {
-      this.__eventChannel__ = new EventChannel();
-    }
-    return this.__eventChannel__
-  };
-  const callHook = Vue.prototype.__call_hook;
-  Vue.prototype.__call_hook = function (hook, args) {
-    if (hook === 'onLoad' && args && args.__id__) {
-      this.__eventChannel__ = getEventChannel(args.__id__);
-      delete args.__id__;
-    }
-    return callHook.call(this, hook, args)
-  };
   App(parseApp(vm));
   return vm
 }
@@ -1887,9 +1943,36 @@ function parseComponent (vueOptions) {
   // lifetimes:attached --> methods:onShow --> methods:onLoad --> methods:onReady
   // 这里在强制将onShow挪到onLoad之后触发,另外一处修改在page-parser.js
   const oldAttached = componentOptions.lifetimes.attached;
-  componentOptions.lifetimes.attached = function attached () {
+  // 百度小程序基础库 3.260 以上支持页面 onInit 生命周期，提前创建 vm 实例
+  componentOptions.lifetimes.onInit = function onInit (query) {
+    // 处理百度小程序 onInit 生命周期调用 setData 无效的问题
+    const setData = this.setData;
+    const setDataArgs = [];
+    this.setData = function () {
+      setDataArgs.push(arguments);
+    };
+    this.__fixInitData = function () {
+      delete this.__fixInitData;
+      this.setData = setData;
+      if (setDataArgs.length) {
+        this.groupSetData(() => {
+          setDataArgs.forEach(args => {
+            setData.apply(this, args);
+          });
+        });
+      }
+    };
     oldAttached.call(this);
-    if (isPage.call(this)) { // 百度 onLoad 在 attached 之前触发
+    this.pageinstance.$vm = this.$vm;
+    this.$vm.__call_hook('onInit', query);
+  };
+  componentOptions.lifetimes.attached = function attached () {
+    if (!this.$vm) {
+      oldAttached.call(this);
+    } else {
+      this.__fixInitData && this.__fixInitData();
+    }
+    if (isPage.call(this)) { // 百度 onLoad 在 attached 之前触发（基础库小于 3.70）
       // 百度 当组件作为页面时 pageinstancce 不是原来组件的 instance
       this.pageinstance.$vm = this.$vm;
       if (hasOwn(this.pageinstance, '_$args')) {
@@ -1976,11 +2059,6 @@ function parsePage (vuePageOptions) {
     initRelation
   });
 
-  const onInit = (vuePageOptions.default || vuePageOptions).onInit;
-  if (onInit) {
-    pageOptions.methods.onInit = onInit;
-  }
-
   // 纠正百度小程序生命周期methods:onShow在methods:onLoad之前触发的问题
   pageOptions.methods.onShow = function onShow () {
     if (this.$vm && this.$vm.$mp.query) {
@@ -1989,7 +2067,7 @@ function parsePage (vuePageOptions) {
   };
 
   pageOptions.methods.onLoad = function onLoad (query) {
-    // 百度 onLoad 在 attached 之前触发，先存储 args, 在 attached 里边触发 onLoad
+    // 百度 onLoad 在 attached 之前触发（基础库小于 3.70），先存储 args, 在 attached 里边触发 onLoad
     if (this.$vm) {
       const copyQuery = Object.assign({}, query);
       delete copyQuery.__id__;
@@ -2022,6 +2100,41 @@ function createComponent (vueOptions) {
   {
     return Component(parseComponent(vueOptions))
   }
+}
+
+function createSubpackageApp (vm) {
+  const appOptions = parseApp(vm);
+  const app = getApp({
+    allowDefault: true
+  });
+  const globalData = app.globalData;
+  if (globalData) {
+    Object.keys(appOptions.globalData).forEach(name => {
+      if (!hasOwn(globalData, name)) {
+        globalData[name] = appOptions.globalData[name];
+      }
+    });
+  }
+  Object.keys(appOptions).forEach(name => {
+    if (!hasOwn(app, name)) {
+      app[name] = appOptions[name];
+    }
+  });
+  if (isFn(appOptions.onShow) && swan.onAppShow) {
+    swan.onAppShow((...args) => {
+      appOptions.onShow.apply(app, args);
+    });
+  }
+  if (isFn(appOptions.onHide) && swan.onAppHide) {
+    swan.onAppHide((...args) => {
+      appOptions.onHide.apply(app, args);
+    });
+  }
+  if (isFn(appOptions.onLaunch)) {
+    const args = swan.getLaunchOptionsSync && swan.getLaunchOptionsSync();
+    appOptions.onLaunch.call(app, args);
+  }
+  return vm
 }
 
 todos.forEach(todoApi => {
@@ -2103,8 +2216,9 @@ if (typeof Proxy !== 'undefined' && "mp-baidu" !== 'app-plus') {
 swan.createApp = createApp;
 swan.createPage = createPage;
 swan.createComponent = createComponent;
+swan.createSubpackageApp = createSubpackageApp;
 
 var uni$1 = uni;
 
 export default uni$1;
-export { createApp, createComponent, createPage };
+export { createApp, createComponent, createPage, createSubpackageApp };

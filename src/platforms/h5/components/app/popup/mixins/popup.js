@@ -6,6 +6,9 @@ export default {
     }
   },
   computed: {
+    isDesktop () {
+      return this.popupWidth >= 500 && this.popupHeight >= 500
+    },
     popupStyle () {
       const style = {}
       const contentStyle = style.content = {}
@@ -14,7 +17,7 @@ export default {
       function getNumber (value) {
         return Number(value) || 0
       }
-      if (this.popupWidth >= 500 && popover) {
+      if (this.isDesktop && popover) {
         Object.assign(triangleStyle, {
           position: 'absolute',
           width: '0',
@@ -26,7 +29,7 @@ export default {
         const popoverWidth = getNumber(popover.width)
         const popoverTop = getNumber(popover.top)
         const popoverHeight = getNumber(popover.height)
-        const center = (popoverLeft + popoverWidth) / 2
+        const center = popoverLeft + popoverWidth / 2
         contentStyle.transform = 'none !important'
         const contentLeft = Math.max(0, center - 300 / 2)
         contentStyle.left = `${contentLeft}px`
@@ -60,8 +63,8 @@ export default {
       this.popupWidth = windowWidth
       this.popupHeight = windowHeight + windowTop
     }
-    this.$watch('visible', value => value && fixSize())
     window.addEventListener('resize', fixSize)
+    fixSize()
     this.$once('hook:beforeDestroy', () => {
       window.removeEventListener('resize', fixSize)
     })

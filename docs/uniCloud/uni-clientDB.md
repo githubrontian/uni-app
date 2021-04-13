@@ -1,6 +1,8 @@
-## 简介
+**重要：** clientDB重大升级，在HBuilderX 2.9.5+中已经内置，不再需要单独下载插件。并且新版增加大量功能。本文已过期，推荐使用clientDB的开发者升级到HBuilderX 2.9.5+，并阅读新文档：[https://uniapp.dcloud.net.cn/uniCloud/clientdb](https://uniapp.dcloud.net.cn/uniCloud/clientdb)
 
-**重要：uni-clientDB 2.0.0版本不兼容旧版，如果你依然需要使用旧版本请在此链接下载 [uni-clientDB 1.0.8](https://vkceyugu.cdn.bspapp.com/VKCEYUGU-dc-site/839b6a50-fe54-11ea-81ea-f115fe74321c.zip)**
+## 旧版clientDB简介
+
+uni-clientDB 2.0.0版本不兼容旧版，如果你依然需要使用旧版本请在此链接下载 [uni-clientDB 1.0.8](https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-dc-site/839b6a50-fe54-11ea-81ea-f115fe74321c.zip)
 
 clientDB框架的目标：减少服务端代码开发。
 
@@ -78,7 +80,7 @@ uni-clientDB项目目录结构如下
 |  └─uni-clientDB             前端的js库，封装了查询语法
 ├─pages                       业务页面文件存放的目录
 ├─main.js                     Vue初始化入口文件
-├─App.vue                     应用配置，用来配置App全局样式以及监听 <a href="/frame?id=应用生命周期">应用生命周期</a>
+├─App.vue                     应用配置，用来配置App全局样式以及监听 <a href="/collocation/frame/lifecycle?id=应用生命周期">应用生命周期</a>
 ├─manifest.json               配置应用名称、appid、logo、版本等打包信息，<a href="/collocation/manifest">详见</a>
 └─pages.json                  配置页面路由、导航条、选项卡等页面类信息，<a href="/collocation/pages">详见</a>
 	</code>
@@ -87,7 +89,7 @@ uni-clientDB项目目录结构如下
 
 ## clientDB框架图解
 
-![](https://static-eefb4127-9f58-4963-a29b-42856d4205ee.bspapp.com/clientdb.jpg)
+![](https://vkceyugu.cdn.bspapp.com/VKCEYUGU-f184e7c3-1912-41b2-b81f-435d1b37c7b4/b673c28f-c41b-406d-8b7a-c3f4bfbf4b31.jpg)
 
 上图中紫色部分为clientDB框架，它分为前端部分和云端部分。
 
@@ -183,7 +185,7 @@ db.collection('list')
 |!						|非						|!(status in ['a','b'])						|查询条件的 status 不是['a','b']中的任何一个									|
 |&&						|与						|uid == auth.uid && age > 10			|查询记录uid属性 为 当前用户uid 并且查询条件的 age 属性大于 10|
 |&#124;&#124;	|或						|uid == auth.uid&#124;&#124;age>10|查询记录uid属性 为 当前用户uid 或者查询条件的 age 属性大于 10|
-|test					|正则校验			|/abc/.test(content)							|查询 content 内包含abc的记录																	|
+|test					|正则校验			|/abc/.test(content)							|查询 content 内包含abc的记录	。可用于替代sql中的like。还可以写更多正则实现更复杂的功能	|
 
 
 ### 刷新token

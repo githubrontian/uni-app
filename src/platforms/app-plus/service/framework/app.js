@@ -57,7 +57,7 @@ export function getApp ({
     return defaultApp
   }
   console.error(
-    '[warn]: getApp() 操作失败，v3模式加速了首页 nvue 的启动速度，当在首页 nvue 中使用 getApp() 不一定可以获取真正的 App 对象。详情请参考：https://uniapp.dcloud.io/collocation/frame/window?id=getapp'
+    '[warn]: getApp() failed. Learn more: https://uniapp.dcloud.io/collocation/frame/window?id=getapp.'
   )
 }
 
@@ -86,7 +86,7 @@ function initGlobalListeners () {
   })
 
   plus.globalEvent.addEventListener('netchange', () => {
-    const networkType = NETWORK_TYPES[plus.networkinfo.getCurrentType()]
+    const networkType = NETWORK_TYPES[plus.networkinfo.getCurrentType()] || 'unknown'
     publish('onNetworkStatusChange', {
       isConnected: networkType !== 'none',
       networkType
@@ -206,7 +206,6 @@ export function registerApp (appVm) {
   if (process.env.NODE_ENV !== 'production') {
     console.log('[uni-app] registerApp')
   }
-
   appCtx = appVm
   appCtx.$vm = appVm
 

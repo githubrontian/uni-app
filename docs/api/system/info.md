@@ -34,11 +34,12 @@
 |host|宿主平台|百度小程序|
 |app|当前运行的客户端|支付宝小程序|
 |cacheLocation|上一次缓存的位置信息|百度小程序|
-|system|操作系统版本||
+|system|操作系统名称及版本，如Android 10||
 |platform|客户端平台，值域为：`ios`、`android`||
 |fontSizeSetting|用户字体大小设置。以“我-设置-通用-字体大小”中的设置为准，单位：px|微信小程序、支付宝小程序、百度小程序、QQ小程序|
 |SDKVersion|客户端基础库版本|支付宝小程序和H5不支持|
 |swanNativeVersion|宿主平台版本号|百度小程序|
+|benchmarkLevel|设备性能等级。取值为：-2 或 0（该设备无法运行小游戏），-1（性能未知），>=1（设备性能值，该值越高，设备性能越好，目前最高不到50）|微信小程序Android版|
 |albumAuthorized	|	允许微信使用相册的开关（仅 iOS 有效）	|微信小程序|
 |cameraAuthorized	|	允许微信使用摄像头的开关	|微信小程序|
 |locationAuthorized	|	允许微信使用定位的开关	|微信小程序|
@@ -52,12 +53,14 @@
 |wifiEnabled	|	Wi-Fi 的系统开关	|微信小程序|
 |safeArea|在竖屏正方向下的安全区域|App、H5、微信小程序|
 |safeAreaInsets|在竖屏正方向下的安全区域插入位置（2.5.3+）|App、H5、微信小程序|
+|deviceId|设备 id|非 App 端由 uni-app 框架生成并存储，清空 Storage 会导致改变|
 
 **Tips**
 - 屏幕高度 = 原生NavigationBar高度（含状态栏高度）+ 可使用窗口高度 + 原生TabBar高度
 - windowHeight不包含NavigationBar和TabBar的高度
 - H5端，windowTop等于NavigationBar高度，windowBottom等于TabBar高度
 - App端，windowTop等于透明状态NavigationBar高度，windowBottom等于透明状态TabBar高度
+- 高度相关信息，要放在 onReady 里获取
 
 **safeArea 的结构**
 
@@ -142,6 +145,7 @@ uni.getSystemInfo({
 |wifiEnabled	|	Wi-Fi 的系统开关	|微信小程序|
 |safeArea|在竖屏正方向下的安全区域|App、H5、微信小程序|
 |safeAreaInsets|在竖屏正方向下的安全区域插入位置（2.5.3+）|App、H5、微信小程序|
+|deviceId|设备 id|非 App 端由 uni-app 框架生成并存储，清空 Storage 会导致改变|
 
 **Tips**
 - 使用注意同上getSystemInfo

@@ -12,7 +12,7 @@
 |allow|String|用于为 [iframe](https://developer.mozilla.org/zh-CN/docs/Web/HTML/Element/iframe) 指定其[特征策略](https://developer.mozilla.org/zh-CN/docs/Web/HTTP/策略特征)|H5|
 |sandbox|String|该属性对呈现在 [iframe](https://developer.mozilla.org/zh-CN/docs/Web/HTML/Element/iframe) 框架中的内容启用一些额外的限制条件。|H5|
 |webview-styles|Object|webview 的样式|App-vue|
-|@message|EventHandler|网页向应用 `postMessage` 时，会在特定时机（后退、组件销毁、分享）触发并收到消息。|H5 暂不支持|
+|@message|EventHandler|网页向应用 `postMessage` 时，会在特定时机（后退、组件销毁、分享）触发并收到消息。|H5 暂不支持（可以直接使用 [window.postMessage](https://developer.mozilla.org/zh-CN/docs/Web/API/Window/postMessage)）|
 |@onPostMessage|EventHandler|网页向应用实时 `postMessage`|App-nvue|
 
 **src**
@@ -62,11 +62,13 @@
 
 注意：
 - 小程序仅支持加载网络网页，不支持本地html
+- 补充说明：app-vue下web-view组件不支持自定义样式，而v-show的本质是改变组件的样式。即组件支持v-if而不是支持v-show。
 - 小程序端 web-view 组件一定有原生导航栏，下面一定是全屏的 web-view 组件，navigationStyle: custom 对 web-view 组件无效。
 - App 端使用 `自定义组件模式` 时，uni.web-view.js 的最低版为 [uni.webview.1.5.2.js](https://js.cdn.aliyun.dcloud.net.cn/dev/uni-app/uni.webview.1.5.2.js)
-- App 平台同时支持网络网页和本地网页，但本地网页及相关资源（js、css等文件）必须放在 `uni-app 项目根目录->hybrid->html` 文件夹下，如下为一个加载本地网页的`uni-app`项目文件目录示例：
+- App 平台同时支持网络网页和本地网页，但本地网页及相关资源（js、css等文件）必须放在 `uni-app 项目根目录->hybrid->html` 文件夹下或者 `static` 目录下，如下为一个加载本地网页的`uni-app`项目文件目录示例：
 - nvue `web-view` 必须指定样式宽高
 - V3 编译模式，网页向应用 `postMessage` 为实时消息
+- app-nvue `web-view` 默认没有大小，可以通过样式设置大小，如果想充满整个窗口，设置 `flex: 1` 即可，标题栏不会自动显示 `web-view` 页面中的 title。如果想充满整个窗口且想要显示标题推荐使用 vue 页面的 `web-view`(默认充满屏幕不可控制大小), 想自定义 `web-view` 大小使用 nvue `web-view`
 
 <pre v-pre="" data-lang="">
 	<code class="lang-" style="padding:0">
@@ -109,7 +111,7 @@
 |uni.reLaunch|[reLaunch](/api/router?id=relaunch)||
 |uni.switchTab|[switchTab](/api/router?id=switchtab)||
 |uni.navigateBack|[navigateBack](/api/router?id=navigateback)||
-|uni.postMessage|向应用发送消息|字节跳动小程序不支持|
+|uni.postMessage|向应用发送消息|字节跳动小程序不支持、H5 暂不支持（可以直接使用 [window.postMessage](https://developer.mozilla.org/zh-CN/docs/Web/API/Window/postMessage)）|
 |uni.getEnv|获取当前环境|字节跳动小程序不支持|
 
 ##### uni.postMessage(OBJECT)
@@ -362,7 +364,7 @@ web-view组件在App和小程序中层级较高，如需要在vue页面中写代
 
 **注意事项**
 - `<web-view>` 组件默认铺满全屏并且层级高于前端组件。App端想调节大小或再其上覆盖内容需使用plus规范。
-- `<web-view>` 组件所在窗口的标题，跟随页面的 `<title>` 值的变化而变化。
+- `<web-view>` 组件所在窗口的标题，跟随页面的 `<title>` 值的变化而变化（不含H5端）。
 - App-vue的`web-view`加载的html页面可以运行plus的api，但注意如果该页面调用了plus.key的API监听了back按键（或使用mui的封装），会造成back监听冲突。需要该html页面移除对back的监听。或按照上面的示例代码禁止网页使用plus对象。app-nvue页面的`web-view`组件不能运行plus API。
 - `uni.webview.js` 最新版地址：[https://js.cdn.aliyun.dcloud.net.cn/dev/uni-app/uni.webview.1.5.2.js](https://js.cdn.aliyun.dcloud.net.cn/dev/uni-app/uni.webview.1.5.2.js)
 - 小程序平台，个人类型与海外类型的小程序使用 `web-view` 组件，提交审核时注意微信等平台是否允许使用

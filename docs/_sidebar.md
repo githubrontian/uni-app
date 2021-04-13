@@ -1,10 +1,20 @@
 * [什么是 uni-app](README.md)
-* [快速上手](quickstart.md)
+* 快速上手
+  * [1. 通过 HBuilderX 可视化界面](quickstart-hx.md)
+  * [2. 通过vue-cli命令行](quickstart-cli.md)
 * [uni-app的由来](history.md)
 * [如何学习](resource.md)
 * [框架简介](frame.md)
-* [使用 Vue.js 注意事项](use.md)
-* [使用 nvue/Weex 注意事项](use-weex.md)
+* vue教程
+  * [基础](vue-basics.md)
+  * [组件](vue-components.md)
+  * [API](vue-api.md)
+  * [vuex](vue-vuex.md)
+* nvue教程
+  * [综述](nvue-outline.md)
+  * [样式](nvue-css.md)
+  * [API](nvue-api.md)
+  * [事件](nvue-event.md)
 * [使用 HTML5+ 注意事项](use-html5plus.md)
 * [条件编译 解决各端差异](platform.md)
 * [uni-app 跨端开发注意](matter.md)
@@ -12,12 +22,18 @@
 * [性能优化建议](performance.md)
 * [宽屏适配指南](adapt.md)
 * [开放生态](ecosystem.md)
+* [uni_modules插件规范](uni_modules.md)
 * [从其他项目转uni-app](translate.md)
 * [混合开发](hybrid.md)
 * [uni小程序sdk](https://nativesupport.dcloud.net.cn/README)
-* [运营服务](cloud.md)
+* 运营服务
+  * [App升级中心](uniCloud/upgrade-center.md)
+  * [uni一键登录](univerify.md)
+  * [统一推送uniPush](unipush.md)
+  * [uni统计](uni-stat.md)
+  * [广告变现](uni-ad.md)
+  * [统一发行页面](m3w.md)
 * [案例](case.md)
-* [开源项目资源汇总](casecode.md)
 * [选型评估指南](select.md)
 * [常见问题](faq.md)
 * 更新日志
@@ -30,31 +46,31 @@
   <li class="show-sponsor-in-phone"><a href="//dev.dcloud.net.cn/sponsor/?channel=uniapp" target="__blank">赞助我们</a></li>
 <div class="contact-box">
   <a href="//unicloud.dcloud.net.cn" target="_blank" class="contact-item">
-  	<img src="//img.cdn.aliyun.dcloud.net.cn/uni-app/cloud%402x.jpg" width="20" height="20"/>
+  	<img src="https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/7962e8e0-4f2d-11eb-a16f-5b3e54966275.jpg" width="20" height="20"/>
   	<div class="contact-smg">
   		<div>uniCloud Web控制台</div>
   	</div>
   </a>
   <a href="//ask.dcloud.net.cn/explore/" target="_blank" class="contact-item">
-  	<img src="//img-cdn-qiniu.dcloud.net.cn/uniapp/doc/d@2x.png" width="20" height="20"/>
+  	<img src="https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/73fc4f90-4f2d-11eb-a16f-5b3e54966275.png" width="20" height="20"/>
   	<div class="contact-smg">
   		<div>论坛</div>
   	</div>
   </a>
   <a href="https://uniad.dcloud.net.cn" target="_blank" class="contact-item">
-    <img src="//img.cdn.aliyun.dcloud.net.cn/uni-app/uniad-520.png" width="20" height="20"/>
+    <img src="https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/765d9820-4f2d-11eb-bd01-97bc1429a9ff.png" width="20" height="20"/>
     <div class="contact-smg">
       <div>uniAD</div>
     </div>
   </a>
   <a href="https://tongji.dcloud.net.cn/" target="_blank" class="contact-item">
-    <img src="//img-cdn-qiniu.dcloud.net.cn/uniapp/doc/uni-tongji-icon.png" width="20" height="20"/>
+    <img src="https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/77159d80-4f2d-11eb-a16f-5b3e54966275.png" width="20" height="20"/>
     <div class="contact-smg">
       <div>uni统计</div>
     </div>
   </a>
 	<div class="contact-item">
-		<img src="//img-cdn-qiniu.dcloud.net.cn/uniapp/doc/git-1.png" width="20" height="20"/>
+		<img src="https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/74cda950-4f2d-11eb-a16f-5b3e54966275.png" width="20" height="20"/>
 		<div class="contact-smg">
 			<div>
 	      代码仓库：<a href="https://gitee.com/dcloud/uni-app" target="_blank">码云</a>、<a href="http://github.com/dcloudio/uni-app" target="_blank">GitHub</a>
@@ -62,20 +78,20 @@
 		</div>
 	</div>
 	<div class="contact-item">
-	  <img src="//img-cdn-qiniu.dcloud.net.cn/uniapp/doc/qq@2x.png" width="20" height="20"/>
+	  <img src="https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/759713d0-4f2d-11eb-a16f-5b3e54966275.png" width="20" height="20"/>
 	  <div class="contact-smg">
 	     <div>官方QQ交流群</div>
-	  <div>群26：147867597 &nbsp;<a target="_blank" href="https://qm.qq.com/cgi-bin/qm/qr?k=IlXuULcigCxsLF2TeII8YMFeW4dYx-r7&jump_from=webapi">点此加入</a></div>
+	  <div>群31：567471669 &nbsp;<a target="_blank" href="https://qm.qq.com/cgi-bin/qm/qr?k=X2_sE_3qKisD7WtZ6RFy6wvNSeJQnmYf&jump_from=webapi">点此加入</a></div>
 		<div>群35：713420817（2000人已满）</div>
 		<div>群34：530305531（2000人已满）</div>
 		<div>群33：498071674（2000人已满）</div>
 		<div>群32：166188631（2000人已满）</div>
-		<div>群31：567471669（2000人已满）</div>
+		<!-- <div>群31：567471669（2000人已满）</div> -->
 		<div>群30：371046920（2000人已满）</div>
 		<div>群29：202965481（2000人已满）</div>
 		<div>群28：166188776（2000人已满）</div>
 		<div>群27：811363410（2000人已满）</div>
-		<!-- <div>群26：147867597（2000人已满）</div> -->
+		<div>群26：147867597（2000人已满）</div>
 		<div>群25：165297000（2000人已满）</div>
 		<div>群24：672494800（2000人已满）</div>
 		<div>群23：599958679（2000人已满）</div>
@@ -104,10 +120,10 @@
 	  </div>
 	</div>
   <div class="contact-item">
-  	<img src="//img-cdn-qiniu.dcloud.net.cn/uniapp/doc/weixin@2x.png" width="20" height="20"/>
+  	<img src="https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/77df7d30-4f2d-11eb-bd01-97bc1429a9ff.png" width="20" height="20"/>
   	<div class="contact-smg">
   		<div>关注微信公众号</div>
-  		<img src="https://img-cdn-qiniu.dcloud.net.cn/uniapp/doc/weixin.jpg" width="90" height="90"/>
+  		<img src="https://bjetxgzv.cdn.bspapp.com/VKCEYUGU-uni-app-doc/78a8e7b0-4f2d-11eb-8ff1-d5dcf8779628.jpg" width="90" height="90"/>
   	</div>
   </div>
 </div>

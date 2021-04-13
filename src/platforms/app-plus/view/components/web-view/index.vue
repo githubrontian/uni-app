@@ -4,7 +4,8 @@
 <script>
 import {
   WEBVIEW_INSERTED,
-  WEBVIEW_REMOVED
+  WEBVIEW_REMOVED,
+  WEBVIEW_ID_PREFIX
 } from '../../../constants'
 
 import { NAVBAR_HEIGHT } from 'uni-helpers/constants'
@@ -34,7 +35,8 @@ const insertHTMLWebView = ({
       const title = webview.getTitle()
       parentWebview.setStyle({
         titleNView: {
-          titleText: (!title || title === 'null') ? '' : title
+          // iOS titleText 为空字符串时 按钮会隐藏
+          titleText: (!title || title === 'null') ? ' ' : title
         }
       })
     })
@@ -91,7 +93,7 @@ export default {
     }
   },
   mounted () {
-    this.htmlId = 'webviewId' + this.$page.id
+    this.htmlId = WEBVIEW_ID_PREFIX + this.$page.id
     insertHTMLWebView({
       htmlId: this.htmlId
     })
