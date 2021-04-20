@@ -1,9 +1,19 @@
+#### 3.1.9.20210413
+* 【uni-app】
+  + App-iOS平台 修复 nvue image 组件加载网络图片发送请求时没有携带 cookie 的Bug
+* 【App插件(含5+App和uni-app的App端)】
+  + Android平台 修复 申请权限被用户拒绝后可能无法再次正常申请权限的Bug [详情](https://ask.dcloud.net.cn/question/120747)
+  + iOS平台 修复 uni-AD 仅开通增强开屏广告可能出现无法关闭spalsh页面的Bug
+  + iOS平台 修复 应用覆盖安装后可能出现启动白屏的Bug
+* 【uniCloud】
+  + 新增 [schema2code HBuilderX插件](https://ext.dcloud.net.cn/plugin?id=4684)，对项目下的schema文件点右键，快速生成数据的增删改查页面。[详情](https://uniapp.dcloud.net.cn/uniCloud/schema?id=autocode)
+
 #### 3.1.8.20210406
 * 【uniCloud】
   + 新增 [uni-upgrade-center](https://uniapp.dcloud.io/uniCloud/upgrade-center)，提供了简单、易用、统一的App管理、App版本管理、安装包发布管理，升级检测更新管理。
   + uniCloud本地调试插件 修复 3.1.5 版本引出的腾讯云连接本地云函数运行一段时间后报错的Bug [详情](https://ask.dcloud.net.cn/question/119089)
-  + 阿里云 新增 支持对云函数设置单实例并发度 [详情](https://uniapp.dcloud.net.cn/uniCloud/cf-functions?id=concurrency)
-  + 阿里云 新增 支持TTL索引 [详情](https://uniapp.dcloud.net.cn/uniCloud/db-index?ttl)
+  + 阿里云 新增 支持对云函数设置单实例并发度，减少冷启动概率 [详情](https://uniapp.dcloud.net.cn/uniCloud/cf-functions?id=concurrency)
+  + 阿里云 新增 支持TTL索引，自动删除临时数据 [详情](https://uniapp.dcloud.net.cn/uniCloud/db-index?ttl)
 * 【App插件(含5+App和uni-app的App端)】
   + Android平台 修复 uni-AD 激励视频播放超过30秒的穿山甲广告点击跳过按钮 onClose 回调中 isEnd 属性值为 false 的Bug
 

@@ -1,4 +1,5 @@
 * [组件概述](component/)
+* [vue组件](component/vue-component.md)
 * 视图容器
   * [view](component/view.md)
   * [scroll-view](component/scroll-view.md)
@@ -44,6 +45,7 @@
 * 广告
   * [ad](component/ad.md)
   * [ad-draw](component/ad-draw.md)
+  * [Grid 广告](component/ad-grid.md)
 * 页面属性配置节点
   * [page-meta](component/page-meta.md)
   * [navigation-bar](component/navigation-bar.md)

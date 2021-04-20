@@ -5,6 +5,7 @@
   * [uni.arrayBufferToBase64](api/arrayBufferToBase64?id=arraybuffertobase64)
   * [生命周期](api/lifecycle.md)
   * [应用级事件](api/application.md)
+  * [拦截器](api/interceptor.md)
 * 网络
   * [发起请求](api/request/request.md)
   * [上传、下载](api/request/network-file.md)
@@ -123,6 +124,7 @@
   * [支付](api/plugins/payment.md)
   * [推送](api/plugins/push.md)
   * [语音](api/plugins/voice.md)
+  * [一键生成iOS通用链接](api/plugins/universal-links.md)
 * [uniCloud](api/uniCloud.md)
 * 平台扩展
   * [App原生插件](api/extend/native-plugin.md)
